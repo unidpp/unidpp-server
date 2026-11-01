@@ -1,0 +1,2680 @@
+openapi: 3.1.0
+info:
+  title: UniDPP — the one deployment
+  version: 0.1.0
+  description: 'UniDPP serves the whole estate as one deployment: every module (registry, trust, log, issuer, views, render, archive, relay) keeps its own contract behind its prefix, and this document is the union of them. Each module''s golden document is served byte-identically at `/<module>/openapi.yaml`; this document exists so a client of the whole deployment reads one surface.'
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  x-unidpp-env-keys:
+  - UNIDPP_REGISTRY_BIND
+  - UNIDPP_REGISTRY_ADMIN_TOKEN
+  - UNIDPP_REGISTRY_STATE_FILE
+  - UNIDPP_REGISTRY_SEED_ON_DEMAND
+  - UNIDPP_REGISTRY_SEED_EXPRESS
+  - UNIDPP_TRUST_BIND
+  - UNIDPP_TRUST_ADMIN_TOKEN
+  - UNIDPP_TRUST_STATE_FILE
+  - UNIDPP_TRUST_NO_SEED_FIXTURES
+  - UNIDPP_TRUST_DEV_SEED
+  - UNIDPP_TRUST_SIGN_SEED
+  - UNIDPP_TRUST_SIGN_SEED_P256
+  - UNIDPP_LOG_BIND
+  - UNIDPP_LOG_ID
+  - UNIDPP_LOG_SUITE
+  - UNIDPP_LOG_SEED
+  - UNIDPP_LOG_APPEND_TOKEN
+  - UNIDPP_LOG_STATE_FILE
+  - UNIDPP_LOG_EXTERNAL_TSA_URL
+  - UNIDPP_ISSUER_BIND
+  - UNIDPP_ISSUER_ADMIN_TOKEN
+  - UNIDPP_ISSUER_STATE_FILE
+  - UNIDPP_ISSUER_REGISTRY_URL
+  - UNIDPP_ISSUER_REGISTRY_TOKEN
+  - UNIDPP_ISSUER_MAX_AGE
+  - UNIDPP_ISSUER_EVENT_SEED
+  - UNIDPP_ISSUER_PACK_SEED
+  - UNIDPP_ISSUER_PACK_SUITE
+  - UNIDPP_ISSUER_SEED
+  - UNIDPP_PROJECTOR_BIND
+  - UNIDPP_REGISTRY_URL
+  - UNIDPP_PROJECTOR_REGISTRY_TOKEN
+  - UNIDPP_PROJECTOR_PASSPORTS_DIR
+  - UNIDPP_PROJECTOR_PRIMMEL_DIR
+  - UNIDPP_PROJECTOR_ROLLUP_SEED
+  - UNIDPP_PROJECTOR_ROLLUP_ATTESTER
+  - UNIDPP_GATEWAY_BIND
+  - UNIDPP_ISSUER_URL
+  - UNIDPP_GATEWAY_ISSUER_URL
+  - UNIDPP_GATEWAY_FEEDBACK_JOURNAL
+  - UNIDPP_GATEWAY_FEEDBACK_RATE
+  - UNIDPP_GATEWAY_ADMIN_TOKEN
+  - UNIDPP_GATEWAY_SCAN_TTL_SECS
+  - UNIDPP_GATEWAY_SCAN_LIMIT_PER_MIN
+  - UNIDPP_GATEWAY_TIMEOUT_MS
+  - UNIDPP_ARCHIVE_BIND
+  - UNIDPP_ARCHIVE_ADMIN_TOKEN
+  - UNIDPP_ARCHIVE_STATE_FILE
+  - UNIDPP_ARCHIVE_SNAPSHOT_DIR
+  - UNIDPP_ARCHIVE_DEV_SEED
+  - UNIDPP_ARCHIVE_SIGN_SEED
+  - UNIDPP_LOG_URL
+  - UNIDPP_ARCHIVE_LOG_TOKEN
+  - UNIDPP_ARCHIVE_LOG_TIMEOUT_MS
+  - UNIDPP_HUB_BIND
+  - UNIDPP_HUB_ID
+  - UNIDPP_HUB_SEED
+servers:
+- url: /
+tags:
+- description: 'The ISO 19135 register: items, subregisters, cross-register mappings, the manifest schema'
+  name: register
+- description: Profile-to-product-type bindings and their clock predicates
+  name: applicability
+- description: 'The discovery registry: C3 services, C4 protocol bindings, C5 verification mechanisms'
+  name: discovery
+- description: EXPRESS and CDDAL semantic model deposits
+  name: models
+- description: 'The operator surface: the audit log and seeding'
+  name: admin
+- description: 'The public surface: discovery, health, keyring, graph, anchor bundle, trust lists, master list, revocations, operators, evidence'
+  name: trust
+- description: 'The transparency-log surface: discovery, commitment sequencing, signed tree heads, consistency proofs and receipts'
+  name: log
+- description: 'Discovery, health, the public keyring and the passport lifecycle: creation, event appendage, pack minting, the document view and the verdict'
+  name: issuance
+- description: The twin-fold view and the consumer render
+  name: projection
+- description: Protocol renderings, the report channel and the scan-policy gate
+  name: gateway
+- description: 'The public surface: discovery, health, the notary keyring, snapshot access and the as-of catalogue'
+  name: archive
+- description: 'The hub surface: discovery, liveness, the keyring, the relay and its verification'
+  name: hub
+paths:
+  /registry/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: endpoint references, item classes, statuses, subregister mounts, as-of semantics, content negotiation, intake checks and the auth posture'
+      summary: Serve the discovery document.
+      tags:
+      - register
+  /registry/admin/log:
+    get:
+      operationId: admin_log
+      parameters:
+      - description: Records to return (default 100, maximum 10 000)
+        in: query
+        name: limit
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      - description: Records to skip (default 0)
+        in: query
+        name: offset
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The journal window
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        GET /admin/log — the append-only audit log (admin, paged).
+        Read the append-only audit log.
+      tags:
+      - admin
+  /registry/admin/seed:
+    post:
+      operationId: admin_seed
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The seed report
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '403':
+          description: Seeding on demand is disabled
+      summary: |-
+        `POST /admin/seed` — idempotent: populates the seed dataset only once
+        per process (or until the journal is wiped). Returns a summary of
+        counts registered. Disabled with `UNIDPP_REGISTRY_SEED_ON_DEMAND=0`.
+        Seed the register with the development corpus (refused when
+        `UNIDPP_REGISTRY_SEED_ON_DEMAND` is off).
+      tags:
+      - admin
+  /registry/applicability:
+    get:
+      operationId: applicability_query
+      parameters:
+      - description: 'The product type (alias: `subject`)'
+        in: query
+        name: product_type
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: A JSON object of subject facts for predicate evaluation
+        in: query
+        name: subject_facts
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The applicability evaluation, as-of stamped
+        '400':
+          description: A missing `product_type` or malformed `subject_facts`
+      summary: |-
+        GET /applicability?product_type=&at=&subject_facts= — which
+        profiles applied at `at` (legal as-of semantics: retroactive
+        bindings apply from their `effective_from`; non-retroactive ones
+        only from `registered_at`). With `subject_facts` (a JSON object),
+        clock predicates on the bound profiles' manifests are evaluated
+        at the query instant: a time-triggered profile binds only once
+        its threshold (`basis + duration`) is crossed. Fact predicates
+        are evaluated locally by the subject's custodian, never here.
+        Evaluate applicability bindings for a product type, optionally
+        against supplied subject facts (the clock predicates run against
+        the facts).
+      tags:
+      - applicability
+    post:
+      operationId: bind_applicability
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The binding: `{product_type, profile_id, ...window and retroactivity fields}`; or an evaluation request `{product_type, subject_facts, at?}`'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The evaluation result (when the body is an evaluation request)
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Bound; the binding view is stated
+        '400':
+          description: An invalid body, or `subject_facts` combined with `profile_id`
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        POST /applicability — bind a profile to a product type with an
+        effective window and a retroactivity flag.
+        Bind a profile to a product type with an effective window and a
+        retroactivity flag. A body carrying `subject_facts` and no
+        `profile_id` is an evaluation request, not a mutation.
+      tags:
+      - applicability
+  /registry/cross-register-mappings:
+    get:
+      operationId: mappings_get_or_list
+      parameters:
+      - description: 'Directional lookup: the mapped item'
+        in: query
+        name: item
+        required: false
+        schema:
+          type: string
+      - description: 'Directional lookup: the source register'
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: 'Directional lookup: the target register'
+        in: query
+        name: target
+        required: false
+        schema:
+          type: string
+      - description: Filter by register id
+        in: query
+        name: register
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing or the directional result, as-of stamped
+      summary: |-
+        GET /cross-register-mappings — with `item`/`source`/`target`
+        filters, the directional lookup; without them, the generic
+        class-scoped listing (content-negotiated like every listing).
+        List cross-register mappings; with `item`, `source` or `target`
+        present this is the directional lookup.
+      tags:
+      - register
+    post:
+      operationId: mappings_create
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The mapping item and its first version
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the item view is stated
+        '400':
+          description: An invalid body or a failed mapping-integrity check
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The mapping is already registered
+      summary: |-
+        Register a cross-register mapping (ISO 19135 harmonization: a
+        mapping between items of two registers is itself a registered
+        item).
+      tags:
+      - register
+  /registry/cross-register-mappings/{id}:
+    get:
+      operationId: mappings_get_one
+      parameters:
+      - description: The mapping identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The mapping view, as-of stamped
+        '404':
+          description: No such mapping as of the requested instant
+      summary: Retrieve one cross-register mapping as of an instant.
+      tags:
+      - register
+  /registry/cross-register-mappings/{id}/supersession:
+    get:
+      operationId: mappings_chain
+      parameters:
+      - description: The mapping identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Start the chain at this version
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The chain, as-of stamped
+        '404':
+          description: No such mapping
+      summary: The supersession chain of a cross-register mapping.
+      tags:
+      - register
+  /registry/cross-register-mappings/{id}/versions:
+    post:
+      operationId: mappings_supersede_one
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The successor version and its manifest
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Superseded; the new version, the superseded version and the item view are stated
+        '400':
+          description: No valid version to supersede or an invalid body
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Supersede a cross-register mapping with a new version.
+      tags:
+      - register
+  /registry/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: The service is serving
+      summary: Liveness probe.
+      tags:
+      - register
+  /registry/items:
+    get:
+      operationId: list_all_items
+      parameters:
+      - description: Filter by item class
+        in: query
+        name: class
+        required: false
+        schema:
+          type: string
+      - description: Filter by register id
+        in: query
+        name: register
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant; the listing is stated as of that instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        List registered items (content-negotiated; `Accept: text/cddal`
+        serves the canonical dictionary form).
+      tags:
+      - register
+    post:
+      operationId: create_items
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The item and its first version: `{register_id, item_id, class, definition, version, status: valid}`'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the item view is stated
+        '400':
+          description: An invalid body or a failed intake check
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The item is already registered
+      summary: Register a new ISO 19135 item with its first version.
+      tags:
+      - register
+  /registry/items/{id}:
+    get:
+      operationId: get_one_item
+      parameters:
+      - description: The item identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The item view, as-of stamped
+        '404':
+          description: No such item as of the requested instant
+      summary: Retrieve one item as of an instant.
+      tags:
+      - register
+  /registry/items/{id}/supersession:
+    get:
+      operationId: one_item_chain
+      parameters:
+      - description: The item identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Start the chain at this version
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The chain, as-of stamped
+        '404':
+          description: No such item
+      summary: The supersession chain of an item.
+      tags:
+      - register
+  /registry/items/{id}/versions:
+    post:
+      operationId: supersede_one_item
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The successor version and its manifest; an explicit `supersede_version` names the version to supersede, otherwise the current valid version is superseded
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Superseded; the new version, the superseded version and the item view are stated
+        '400':
+          description: No valid version to supersede, a manifest pin that matches no registered version, or an invalid body
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        Supersede an item's current version with a new one
+        (append-only; the window of the superseded version closes).
+      tags:
+      - register
+  /registry/models:
+    get:
+      operationId: list_models
+      parameters:
+      - description: Filter by register id
+        in: query
+        name: register
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        GET /models — list deposited models with their validation status.
+        List deposited models.
+      tags:
+      - models
+    post:
+      operationId: deposit_model
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`{register_id, item_id, title, version, source, submitting_organization?}`'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Deposited; the content hash and the validation status are stated
+        '400':
+          description: An invalid body or a rejected (invalid) model
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The model is already deposited
+      summary: |-
+        POST /models — deposit an EXPRESS model: source text + metadata;
+        content hash over the exact bytes; expressir validation
+        (subprocess; `pending` when the binary is absent; `invalid`
+        deposits are rejected).
+        Deposit an EXPRESS (or CDDAL) semantic model: source text plus
+        metadata; the content hash covers the exact bytes and expressir
+        validates the source (pending when the binary is absent; invalid
+        deposits are rejected).
+      tags:
+      - models
+  /registry/models/{id}:
+    get:
+      operationId: get_model
+      parameters:
+      - description: The model identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: Pin the retrieval to this content hash
+        in: query
+        name: hash
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The model record, as-of stamped
+        '404':
+          description: No such model, or the pinned hash matches no deposit
+      summary: |-
+        GET /models/{id}?at=&hash= — the deposited source, its content
+        hash and validation status. With `hash=`, retrieval is pinned to
+        that hash (mismatch → 409).
+        Retrieve a deposited model; hash-pinned retrieval names an exact
+        byte form.
+      tags:
+      - models
+  /registry/models/{id}/validate:
+    post:
+      operationId: validate_model
+      parameters:
+      - description: The model identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The validation report
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '404':
+          description: No such model
+      summary: |-
+        POST /models/{id}/validate — re-run expressir validation over the
+        stored source and record the outcome (the degrade path: deposits
+        stored `pending` become `valid`/`invalid` once expressir is
+        available).
+        Re-run expressir validation over a deposited model.
+      tags:
+      - models
+  /registry/protocol-bindings:
+    get:
+      operationId: list_protocol_bindings
+      parameters:
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        `GET /protocol-bindings` — list all registered protocol bindings.
+        List registered C4 protocol bindings.
+      tags:
+      - discovery
+    post:
+      operationId: create_protocol_binding
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The signed protocol binding descriptor
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the stored record is stated
+        '400':
+          description: The descriptor or its signature fails the intake checks
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        `POST /protocol-bindings` — register a signed C4 protocol binding.
+        Register a signed C4 protocol binding descriptor.
+      tags:
+      - discovery
+  /registry/protocol-bindings/{id}:
+    get:
+      operationId: get_protocol_binding
+      parameters:
+      - description: The protocol binding identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The descriptor
+        '404':
+          description: No such protocol binding
+      summary: |-
+        `GET /protocol-bindings/{id}` — a single protocol binding.
+        Retrieve one C4 protocol binding descriptor.
+      tags:
+      - discovery
+  /registry/schemas/profile-manifest:
+    get:
+      operationId: get_profile_manifest_schema
+      parameters:
+      - description: 'An RFC 3339 instant for the as-of stamp (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/schema+json:
+              schema: {}
+          description: The JSON Schema, as-of stamped
+      summary: |-
+        GET /schemas/profile-manifest — the JSON Schema (draft 2020-12)
+        generated from the canonical manifest model. The `as_of` member
+        is serving metadata (not a validation keyword; draft 2020-12
+        validators ignore it); the schema version rides in `$id`.
+        The generated JSON Schema of a profile manifest.
+      tags:
+      - register
+  /registry/services:
+    get:
+      operationId: list_services
+      parameters:
+      - description: Filter by service class
+        in: query
+        name: class
+        required: false
+        schema:
+          type: string
+      - description: Filter by jurisdiction
+        in: query
+        name: jurisdiction
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        `GET /services` — list services with optional `class=` and
+        `jurisdiction=` filters and `at=` point-in-time semantics.
+        List registered C3 service descriptors.
+      tags:
+      - discovery
+    post:
+      operationId: create_service
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The signed service descriptor
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the stored record is stated
+        '400':
+          description: The descriptor or its signature fails the intake checks
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        `POST /services` — register a signed C3 service descriptor.
+        Register a signed C3 service descriptor (the signature is
+        verified against the operator keyring at intake).
+      tags:
+      - discovery
+  /registry/services/{id}:
+    get:
+      operationId: get_service
+      parameters:
+      - description: The service identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The descriptor, as-of stamped
+        '404':
+          description: No such service as of the requested instant
+      summary: |-
+        `GET /services/{id}` — a single service descriptor with the version
+        in force at `at`.
+        Retrieve one C3 service descriptor as of an instant.
+      tags:
+      - discovery
+  /registry/services/{id}/supersession:
+    get:
+      operationId: service_chain
+      parameters:
+      - description: The service identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Start the chain at this version
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The chain, as-of stamped
+        '404':
+          description: No such service
+      summary: |-
+        `GET /services/{id}/supersession` — the supersession chain for a
+        service descriptor.
+        The supersession chain of a C3 service descriptor.
+      tags:
+      - discovery
+  /registry/services/{id}/versions:
+    post:
+      operationId: supersede_service
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The signed successor descriptor
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Superseded; the stored record is stated
+        '400':
+          description: The descriptor or its signature fails the intake checks
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        `POST /services/{id}/versions` — supersede a service descriptor
+        with a new signed version.
+        Supersede a C3 service descriptor with a new signed version.
+      tags:
+      - discovery
+  /registry/verification-mechanisms:
+    get:
+      operationId: list_verification_mechanisms
+      parameters:
+      - description: 'An RFC 3339 instant (alias: `asof`)'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        `GET /verification-mechanisms` — list all registered verification
+        mechanisms.
+        List registered C5 verification mechanisms.
+      tags:
+      - discovery
+    post:
+      operationId: create_verification_mechanism
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The signed verification mechanism descriptor
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the stored record is stated
+        '400':
+          description: The descriptor or its signature fails the intake checks
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        `POST /verification-mechanisms` — register a signed C5 verification
+        mechanism.
+        Register a signed C5 verification mechanism descriptor.
+      tags:
+      - discovery
+  /registry/verification-mechanisms/{id}:
+    get:
+      operationId: get_verification_mechanism
+      parameters:
+      - description: The verification mechanism identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The descriptor
+        '404':
+          description: No such verification mechanism
+      summary: |-
+        `GET /verification-mechanisms/{id}` — a single verification
+        mechanism.
+        Retrieve one C5 verification mechanism descriptor.
+      tags:
+      - discovery
+  /registry/{class}:
+    get:
+      operationId: sub_list
+      parameters:
+      - description: The subregister's class plural
+        in: path
+        name: class
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing, as-of stamped
+      summary: |-
+        List a subregister's items (content-negotiated;
+        `Accept: text/cddal` serves the canonical dictionary form).
+      tags:
+      - register
+    post:
+      operationId: sub_create
+      parameters:
+      - description: The subregister's class plural
+        in: path
+        name: class
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The item and its first version
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Registered; the item view is stated
+        '400':
+          description: An invalid body or a failed intake check
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The item is already registered
+      summary: |-
+        Register an item in a class subregister (the class is the mount
+        point: data-elements, profiles, crypto-suites, transforms,
+        trust-anchors, units).
+      tags:
+      - register
+  /registry/{class}/{id}:
+    get:
+      operationId: sub_get
+      parameters:
+      - description: The subregister's class plural
+        in: path
+        name: class
+        required: true
+        schema:
+          type: string
+      - description: The item identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The item view, as-of stamped
+        '404':
+          description: No such item as of the requested instant
+      summary: Retrieve one subregister item as of an instant.
+      tags:
+      - register
+  /registry/{class}/{id}/supersession:
+    get:
+      operationId: sub_chain
+      parameters:
+      - description: The subregister's class plural
+        in: path
+        name: class
+        required: true
+        schema:
+          type: string
+      - description: The item identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The chain, as-of stamped
+        '404':
+          description: No such item
+      summary: The supersession chain of a subregister item.
+      tags:
+      - register
+  /registry/{class}/{id}/versions:
+    post:
+      operationId: sub_supersede
+      parameters:
+      - description: The subregister's class plural
+        in: path
+        name: class
+        required: true
+        schema:
+          type: string
+      - description: The item identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The successor version and its manifest
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Superseded; the new version, the superseded version and the item view are stated
+        '400':
+          description: No valid version to supersede or an invalid body
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Supersede a subregister item's current version.
+      tags:
+      - register
+  /trust/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the service identity, the signing posture (the tree-head domain, both suites, the signature headers), the endpoint table, the revocation semantics, the as-of conventions, the seed-fixture provenance and the authentication rule'
+      summary: Serve the discovery document.
+      tags:
+      - trust
+  /trust/admin/evidence:
+    post:
+      operationId: register_evidence
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`{{"id": ..., "requiredScope": ..., "contentHex": ...}}` — the bytes hex-encoded; optional `contentType` (default `application/octet-stream`) and `description`. Ungated registration is refused, and re-registration of an identifier is a conflict because supersession of evidence is a new identifier, not an edit'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The document is registered; its catalogue metadata and the audit sequence number are stated
+        '400':
+          description: Invalid JSON, a missing `id`, `requiredScope` or `contentHex`, or a `contentHex` that does not decode
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: An evidence document with this identifier is already registered
+      summary: |-
+        POST /admin/evidence — register a gated evidence document: id,
+        contentType, description, requiredScope, contentHex (hex-encoded
+        bytes; the journal stores the same encoding, so replay is exact).
+        Register a gated evidence document.
+      tags:
+      - admin
+  /trust/admin/log:
+    get:
+      operationId: admin_log
+      parameters:
+      - description: Records to return (default 100, maximum 10 000)
+        in: query
+        name: limit
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      - description: Records to skip (default 0)
+        in: query
+        name: offset
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The audit-log window: the total record count, the offset and the records'
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Serve the append-only audit log.
+      tags:
+      - admin
+  /trust/anchor-bundle:
+    get:
+      operationId: anchor_bundle
+      parameters:
+      - description: The jurisdiction whose trust list the bundle carries beside the master list
+        in: query
+        name: jurisdiction
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; the bundle is rendered as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The verifier-shaped anchor bundle: the jurisdiction''s trust list and the M-of-K master list, with wire-form keys a verifier rebuilds without touching the asymmetric PublicKey serde'
+        '400':
+          description: The `jurisdiction` parameter is absent, or the `at` parameter is present and is not a valid RFC 3339 instant
+        '404':
+          description: No trust list exists for the requested jurisdiction
+      summary: Serve the verifier artifact for one jurisdiction.
+      tags:
+      - trust
+  /trust/edges:
+    post:
+      operationId: add_edge
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The parent-signed delegation credential document: `parent`, `child`, the signature slots and the delegated scope'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The credential is added; the stored credential and the audit sequence number are stated
+        '400':
+          description: Invalid JSON, or a credential the graph rejects (an unknown endpoint, an invalid signature or a scope violation)
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Add a delegation credential to the trust graph.
+      tags:
+      - admin
+  /trust/evidence:
+    get:
+      operationId: evidence_catalogue
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The catalogue metadata only: identifiers, content types, descriptions, required scopes and sizes; document content never appears in the catalogue'
+      summary: |-
+        GET /evidence — the public catalogue: metadata only (ids, content
+        types, required scopes, sizes). Content never appears here; a
+        document is released only under its scope.
+        Serve the gated-evidence catalogue.
+      tags:
+      - trust
+  /trust/evidence/{id}:
+    get:
+      operationId: evidence_release
+      parameters:
+      - description: The evidence identifier
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: The requester's scope; the `X-UniDPP-Scope` header is accepted when the parameter is absent, and the parameter outranks the header
+        in: query
+        name: scope
+        required: false
+        schema:
+          type: string
+      - description: The requester identity the journal records; the `X-UniDPP-Requester` header is accepted when the parameter is absent
+        in: query
+        name: requester
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema: {}
+          description: The document bytes are released and the signature covers the exact bytes returned; the response carries the registered content type and the required scope, and the release is journaled
+        '403':
+          description: The presented scope does not satisfy the registration; the refusal is a stated error naming the required scope, and no release is journaled
+        '404':
+          description: No evidence document with this identifier is registered
+      summary: |-
+        GET /evidence/{id}?scope=... — release a gated evidence document
+        (TODO.impl 224): the MobileQR `getbase64str` pattern with the
+        honesty doctrine applied. The scope arrives as the `scope` query
+        parameter or the `X-UniDPP-Scope` header (the parameter outranks
+        the header); the requester, when presented, as `requester` or
+        `X-UniDPP-Requester`. A scope that does not satisfy the
+        registration is a **stated 403 naming the required scope** — never
+        a silent 404; a release journals the access decision and the
+        response is signed over the exact bytes returned (integrity is the
+        signature, not a digest field).
+        Release a gated evidence document under its scope.
+      tags:
+      - trust
+  /trust/graph:
+    get:
+      operationId: graph
+      parameters:
+      - description: An RFC 3339 instant; the graph is rendered as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The trust graph: the node count, the edge count, the nodes and the delegation edges, stamped with the as-of instant; a verifier reconstructs the signatif objects from this document'
+        '400':
+          description: The `at` parameter is present and is not a valid RFC 3339 instant
+      summary: Serve the full trust graph.
+      tags:
+      - trust
+  /trust/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The service is serving; the signed status names the service and carries the as-of instant
+      summary: Liveness probe.
+      tags:
+      - trust
+  /trust/keyring:
+    get:
+      operationId: keyring
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The public keyring: the keyring mode, the per-role suites, key ids and hex-encoded public anchors a verifier pins (the CLI `--anchor`), the signing domain and the verification recipe matching the response headers'
+      summary: Serve the public keyring.
+      tags:
+      - trust
+  /trust/master-list:
+    get:
+      operationId: master_list
+      parameters:
+      - description: An RFC 3339 instant; attestations are verified against the witness set as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The master list: the M-of-K shape, the witness list, and every entry with its attestations, the live per-attestation verification results, the verified-witness count and the quorum verdict'
+        '400':
+          description: The `at` parameter is present and is not a valid RFC 3339 instant
+      summary: Serve the M-of-K master list.
+      tags:
+      - trust
+  /trust/master-list/entries:
+    post:
+      operationId: upsert_master_entry
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The entry: `node` and `attestations` (witness, instant, signature slot); every attestation must name a witness that is already registered'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The entry is upserted; the node, the attestations and the audit sequence number are stated
+        '400':
+          description: Invalid JSON, an invalid entry, or an attestation naming an unregistered witness
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Upsert one master-list entry.
+      tags:
+      - admin
+  /trust/master-list/witnesses:
+    post:
+      operationId: set_witnesses
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`{{"m": <threshold>, "witnesses": [...]}}` — the M-of-K shape is replaced wholesale by the stated threshold and witness keys'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The witness set is replaced; the new M-of-K shape with the rendered witnesses and the audit sequence number are stated
+        '400':
+          description: Invalid JSON, a missing `m` or `witnesses`, or an `m` that exceeds the witness count
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Replace the witness set of the master list.
+      tags:
+      - admin
+  /trust/nodes:
+    post:
+      operationId: register_node
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The node document: `id` and `kind` (root, threshold-group, delegated or end); optional `keys`, which are merged into any existing registration of the same node'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The node is registered; the stored node and the audit sequence number are stated
+        '400':
+          description: Invalid JSON or an invalid node document
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Register a trust-graph node.
+      tags:
+      - admin
+  /trust/operators/{node}:
+    get:
+      operationId: operator_view
+      parameters:
+      - description: The operator's node id
+        in: path
+        name: node
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; memberships are read for force at that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The operator''s credential directory: identity (kind, registered keys), delegation position (edges in and out with their scopes), trust-list memberships with their validity windows, master-list attestations and revocation standing'
+        '400':
+          description: The node id is not a valid operator node id, or the `at` parameter is present and is not a valid RFC 3339 instant
+        '404':
+          description: No operator with this node id is known here
+      summary: |-
+        GET /operators/{node}?at= — the operator surface (TODO.impl 224):
+        one operator's credential directory rendered from the same
+        registries (MobileQR's firm page + credential 有效期 counterpart):
+        identity (kind, registered keys), delegation position (edges in
+        and out with their scopes), trust-list memberships **with their
+        validity windows** (`not_before` / `superseded_at`), master-list
+        attestations, and revocation standing. An unknown operator is a
+        stated 404.
+        Serve the operator surface for one node.
+      tags:
+      - trust
+  /trust/revocations:
+    get:
+      operationId: revocations
+      parameters:
+      - description: An RFC 3339 instant; each declaration is read for void-ab-initio standing at that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: An RFC 3339 evidentiary cutoff; declarations made after it keep prior as-of verifications valid
+        in: query
+        name: known_by
+        required: false
+        schema:
+          type: string
+      - description: A distrust window `START..END` (or `START,END`); declarations whose window overlaps it are returned
+        in: query
+        name: window
+        required: false
+        schema:
+          type: string
+      - description: Restrict the response to declarations naming this subject (prefix match)
+        in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - description: '`true` restricts to retroactive reasons, `false` to prospective reasons'
+        in: query
+        name: retroactive
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The declarations with the live reading: `known_at_cutoff`, `voids_at_as_of`, `standing_at_as_of`, the quorum verdict for retroactive declarations and the governing rule'
+        '400':
+          description: The `at`, `known_by` or `window` parameter does not parse, or `retroactive` is not a boolean
+      summary: Serve the revocation ledger with the live retroactivity reading.
+      tags:
+      - trust
+    post:
+      operationId: declare_revocation
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The declaration: `subject`, `reason`, `declared_at` (RFC 3339), `declared_by` and `window`; a retroactive reason additionally requires a quorate attestation (member-key slots, or a threshold-ceremony group signature pinned on the quorum node — see `quorum`)'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The declaration is recorded; the subject, the reason, the window and the audit sequence number are stated
+        '400':
+          description: Invalid JSON or an invalid declaration document
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '422':
+          description: 'The declaration is refused on the merits: a retroactive reason without a quorum attestation, or an attestation that does not reach the threshold'
+      summary: Declare a revocation.
+      tags:
+      - admin
+  /trust/trust-lists:
+    get:
+      operationId: trust_lists
+      parameters:
+      - description: An RFC 3339 instant; every entry carries `in_force_at_as_of` for that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: Restrict the response to one jurisdiction
+        in: query
+        name: jurisdiction
+        required: false
+        schema:
+          type: string
+      - description: Restrict the response to the lists whose framework matches this value
+        in: query
+        name: framework
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The trust lists, each with its jurisdiction, framework and entries with their validity windows, sorted by jurisdiction
+        '400':
+          description: The `at` parameter is present and is not a valid RFC 3339 instant
+      summary: Serve the jurisdiction trust lists.
+      tags:
+      - trust
+    post:
+      operationId: register_trust_list
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`{{"jurisdiction": ...}}`; optional `framework` and an initial `entries` array, which is applied after the list is registered'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The list is registered; the jurisdiction, the framework and the audit sequence number are stated
+        '400':
+          description: Invalid JSON, a missing or invalid `jurisdiction`, or an invalid entry in `entries`
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: A trust list for this jurisdiction is already registered
+      summary: Register a jurisdiction trust list.
+      tags:
+      - admin
+  /trust/trust-lists/{jur}:
+    get:
+      operationId: trust_list_one
+      parameters:
+      - description: The jurisdiction (matched case-insensitively)
+        in: path
+        name: jur
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; every entry carries `in_force_at_as_of` for that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The jurisdiction''s trust list: jurisdiction, framework and the entries with their validity windows'
+        '400':
+          description: The `at` parameter is present and is not a valid RFC 3339 instant
+        '404':
+          description: No trust list exists for the requested jurisdiction
+      summary: Serve one jurisdiction's trust list.
+      tags:
+      - trust
+  /trust/trust-lists/{jur}/entries:
+    post:
+      operationId: upsert_trust_entry
+      parameters:
+      - description: The jurisdiction (matched case-insensitively)
+        in: path
+        name: jur
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The entry: `node` and `not_before` (RFC 3339); optional `superseded_at`, an RFC 3339 instant whose presence is the withdrawal of the entry'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The entry is upserted; the jurisdiction, the node, the validity window and the audit sequence number are stated
+        '400':
+          description: Invalid JSON or an invalid entry document
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '404':
+          description: No trust list exists for this jurisdiction
+      summary: Upsert one entry of a jurisdiction trust list.
+      tags:
+      - admin
+  /log/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the log identity and version, the operator public key with its key id and fingerprint, the endpoint references, the receipt-verification steps, the sequencing and enumeration invariants, and the quorum posture'
+      summary: Serve the discovery document.
+      tags:
+      - log
+  /log/commitments:
+    post:
+      operationId: commit
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`{{"subject": ..., "commitment": <64-character hex SHA-256 value>, "salt_ref": <unsigned integer, optional>}}`'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The commitment is sequenced and the signed inclusion receipt is stated: leaf index, Merkle path and the append-time signed tree head, verifiable against the operator public key published in the discovery document'
+        '400':
+          description: Invalid JSON, a missing or oversized `subject`, a commitment that is not a 64-character hex SHA-256 value, or a `salt_ref` that is not an unsigned integer
+        '401':
+          description: An append token is configured and the request does not carry it
+        '500':
+          description: The journal rejected the append (a storage failure)
+      summary: |-
+        Sequence a subject commitment and return the signed inclusion
+        receipt.
+      tags:
+      - log
+  /log/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: The service is serving
+      summary: Liveness probe.
+      tags:
+      - log
+  /log/receipt/{seq}:
+    get:
+      operationId: receipt
+      parameters:
+      - description: The sequence number of the receipt (an unsigned integer)
+        in: path
+        name: seq
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The receipt, byte-identical to the one returned by the append that produced the sequence number
+        '400':
+          description: The sequence number is not an unsigned integer
+        '404':
+          description: No receipt exists for the sequence number
+      summary: |-
+        Re-serve a receipt byte-identically (derived state, deterministic
+        under journal replay).
+      tags:
+      - log
+  /log/tree/consistency:
+    get:
+      operationId: tree_consistency
+      parameters:
+      - description: The pinned prefix size (an unsigned integer); the proof ties that prefix to the current head
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The consistency proof: the old and new sizes and roots and the audit path, verifiable against a previously pinned root and the current head''s root'
+        '400':
+          description: A missing `from`, a `from` that is not an unsigned integer, or a `from` larger than the current tree size
+      summary: |-
+        The consistency proof from a pinned prefix to the current head
+        (what lets a receipt stay valid as the tree grows).
+      tags:
+      - log
+  /log/tree/head:
+    get:
+      operationId: tree_head
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The latest signed tree head with its external RFC 3161 anchor state; for an empty log the head carries tree size zero and null timestamp, root and signature
+      summary: |-
+        The latest signed tree head (append-time checkpoint, monotonic in
+        size, byte-identical across restarts).
+      tags:
+      - log
+  /issuer/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the service identity and build, the endpoint index, the keyring mode, the signature suites for events and packs, the as-of stamping convention, the authentication posture and the registry configuration'
+      summary: Serve the discovery document.
+      tags:
+      - issuance
+  /issuer/admin/applicability:
+    get:
+      operationId: applicability_query
+      parameters:
+      - description: The product type whose bindings are in force
+        in: query
+        name: product_type
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; the bindings are evaluated as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The product type and the count and records of the bindings in force at the requested instant
+        '400':
+          description: A missing `product_type` or an invalid `at` instant
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Serve the applicability bindings in force for a product type.
+      tags:
+      - admin
+    post:
+      operationId: bind_applicability
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`profile_id` and `product_type` are required; optional `profile_version`, `effective_from` (RFC 3339, default now), `effective_until` (must not precede `effective_from`), and `retroactive` (default false)'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The binding is recorded: the stored binding, the transport used (`registry` or the fixtures fallback), the registry response when a live registry answered, and the audit sequence are stated'
+        '400':
+          description: An invalid body, a profile that is not registered here, an `effective_until` preceding `effective_from`, or a registry rejection of the forwarded binding
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Bind a profile to a product type.
+      tags:
+      - admin
+  /issuer/admin/log:
+    get:
+      operationId: admin_log
+      parameters:
+      - description: Records to return (default 100, maximum 10 000)
+        in: query
+        name: limit
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+      - description: Records to skip (default 0)
+        in: query
+        name: offset
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The journal window: every recorded mutation of every passport, profile and binding, in recording order'
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Serve the append-only audit log, paged.
+      tags:
+      - admin
+  /issuer/admin/profiles:
+    get:
+      operationId: list_profiles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The count and the locally registered profiles with their definitions, versions, registers, jurisdictions, data points and registration instants
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: List the locally registered profiles.
+      tags:
+      - admin
+    post:
+      operationId: register_profile
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`profile_id` and `definition` are required; optional `version` (default `1.0.0`), `register_id`, `jurisdiction`, `issuer_class` (default `declaration`), and `data_points` (an array of non-empty strings). The registration is forwarded in its signed form: the issuer composes the manifest and signs it in the Profile domain'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The profile is registered: the stored record, the transport used (`registry` or the fixtures fallback), the registry response when a live registry answered, and the audit sequence are stated'
+        '400':
+          description: An invalid body, a registry rejection of the forwarded registration, or a profile id already registered here
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The profile id is already registered here
+      summary: Register a profile locally and forward it to the configured registry.
+      tags:
+      - admin
+  /issuer/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: The service is serving
+      summary: Serve the liveness probe.
+      tags:
+      - issuance
+  /issuer/keyring:
+    get:
+      operationId: keyring
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The keyring''s public side: the event key and every pack key, each with its suite, key identifier and public value'
+      summary: Serve the public anchors a verifier pins.
+      tags:
+      - issuance
+  /issuer/passports:
+    get:
+      operationId: list_passports
+      parameters:
+      - description: Records per page (default 100, cap 500, floor 1)
+        in: query
+        name: limit
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+      - description: Records to skip (default 0)
+        in: query
+        name: offset
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The page: the total count (independent of the window), the window parameters and the passport summaries (passport id, product identity, capability class, economic-operator identity, event count); the listing is current-state'
+        '400':
+          description: A non-numeric `limit` or `offset`
+      summary: List the issued passports, paged.
+      tags:
+      - issuance
+    post:
+      operationId: create_passport
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The creation request: `identity` (aliases `product_id` and `id`) is required; optional `granularity`, `capability` (`S0`-`S3` or a canonical name, default `S0`), `type_ref` (alias `type`), `eo_id`, `resolver_uri`, `passport_id` (default: the content- and time-derived identity), `valid_from` and `valid_to` (RFC 3339), and `config` (alias `configuration`; a non-empty string or an array of non-empty strings)'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The passport is created: the passport id, the schema, the product identity and granularity, the type reference, the config vector, the capability class, the economic-operator identity, the resolver URI, the validity interval, the empty log and the audit sequence are stated'
+        '400':
+          description: An invalid body, an unparseable product identity, an unknown granularity or capability token, a rejected passport document, or a config vector that is not an array of non-empty strings
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The passport id is already registered
+      summary: Create a passport from the identity, the type reference, the config vector and the capability class.
+      tags:
+      - issuance
+  /issuer/passports/{id}:
+    get:
+      operationId: get_passport
+      parameters:
+      - description: The passport id
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; the document is rendered as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The passport view: the document loadable by `unidpp pack`/`verify` verbatim, plus the config vector, the replayed status and safety state, the custodian when stated, the log head, the event count and the as-of stamp'
+        '400':
+          description: An invalid `at` instant
+        '404':
+          description: 'The no-information 404: unknown passports answer the byte-identical body (I12)'
+      summary: 'Render the passport document: the core, the manifest layer and the log head.'
+      tags:
+      - issuance
+  /issuer/passports/{id}/events:
+    post:
+      operationId: append_event
+      parameters:
+      - description: The passport id
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: '`type` is required (a typed-event token); optional `data` (alias `payload`; the event class''s default payload is used when it has one), `at` (RFC 3339, default now), `actor` (default: the passport''s economic operator), `actor_role` (default: the event class''s appender role), and `sign` (default true; a false value leaves the event unsigned)'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The event is appended: the sequence number, the event type, the occurred-at instant, the actor, the trust marker, the signature record, the log head, the resulting status and safety state and the audit sequence are stated'
+        '400':
+          description: An invalid body, an unknown event type, a rejected payload, or a missing `data` where the event class has no default payload
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '404':
+          description: The passport is not known here (the no-information 404)
+        '409':
+          description: The event's status transition is illegal (I6) or the sequence collides
+      summary: Append a typed event to a passport's log; the server signs it, and illegal status transitions are rejected (I6).
+      tags:
+      - issuance
+  /issuer/passports/{id}/pack:
+    post:
+      operationId: mint_pack
+      parameters:
+      - description: The passport id
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The mint options, all optional (an empty body is accepted): `budget` (error-correction level and version), `encoding` (default `hex`), `sign` (default true), and `suite` (alias `suites`; one token or a comma-separated co-signature list overriding the deployment policy for this pack)'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: 'The pack is minted over the passport log: the encoded pack, the byte budget accounting (used, projected, QR version, margin), the signature records with their anchors and the keyring anchors are stated'
+        '400':
+          description: An invalid body, an unknown budget, encoding or suite token, or a pack signing failure
+        '404':
+          description: The passport is not known here (the no-information 404)
+        '413':
+          description: The pack exceeds the requested QR budget
+      summary: Mint the Tier-A offline pack with a real carrier signature and QR budget enforcement.
+      tags:
+      - issuance
+  /issuer/passports/{id}/verdict:
+    get:
+      operationId: passport_verdict
+      parameters:
+      - description: The passport id
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; the verdict is computed as of that instant (alias `asof`)
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: 'The freshness window of the Tier-A verdict leg in seconds (default: the deployment''s `UNIDPP_ISSUER_MAX_AGE`; `0` selects static/archival semantics)'
+        in: query
+        name: max_age
+        required: false
+        schema:
+          format: int64
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The verdict and its coverage: the log verdict, the event-signature audit (every recorded signature re-verified against the keyring anchor), the Tier-A carrier leg (grade, findings, readings, coverage, freshness, trust marker, byte accounting) and the config resolution'
+        '400':
+          description: An invalid `at` or `max_age`, or a pack signing failure in the carrier leg
+        '404':
+          description: The passport is not known here (the no-information 404)
+        '413':
+          description: The Tier-A carrier leg exceeds the QR budget
+      summary: Run the full-pipeline verdict for a passport and state its coverage.
+      tags:
+      - issuance
+  /views/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the view and render query forms, the as-of semantics, the coverage honesty and the render metadata shape'
+      summary: Serve the discovery document.
+      tags:
+      - projection
+  /views/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: The service is serving
+      summary: Liveness probe.
+      tags:
+      - projection
+  /views/render:
+    get:
+      description: |-
+        One presentation computation, three wire formats (TODO.impl 224):
+        JSON by default; `Accept: text/html` or `text/plain` (or an
+        explicit `format` parameter, which outranks the header) serves the
+        same render document as a standalone HTML page or as speakable
+        text (the TTS substrate) — the consumer surfaces a scanned code
+        resolves to.
+        The consumer presentation: the passport's data points arranged per
+        the lens's presentation binding, localized and formatted, with
+        links to the authoritative sources. One presentation computation,
+        three wire formats — JSON by default; `Accept: text/html` or
+        `text/plain` (or an explicit `format` parameter, which outranks
+        the header) serves the same render document as a standalone HTML
+        page or as speakable text.
+      operationId: render_handler
+      parameters:
+      - description: The passport identifier
+        in: query
+        name: passport
+        required: true
+        schema:
+          type: string
+      - description: The profile whose presentation binding is applied
+        in: query
+        name: profile
+        required: true
+        schema:
+          type: string
+      - description: The requested language tag (a fallback is served when the requested language has no label)
+        in: query
+        name: lang
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      - description: '`html`, `text` or `json`; outranks the `Accept` header'
+        in: query
+        name: format
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The render, as-of stamped
+        '400':
+          description: A missing required query parameter, or an unknown `format`
+        '404':
+          description: No such passport
+      summary: |-
+        GET /render — the consumer presentation (TODO.impl 54): the
+        passport's data points arranged per the lens's presentation
+        binding, localized, formatted, with links to the authoritative
+        sources and the same coverage honesty as the view.
+      tags:
+      - projection
+  /views/view:
+    get:
+      operationId: view
+      parameters:
+      - description: The passport identifier
+        in: query
+        name: passport
+        required: true
+        schema:
+          type: string
+      - description: The profile whose lens is applied
+        in: query
+        name: profile
+        required: true
+        schema:
+          type: string
+      - description: The requesting role (the lens may gate data points on it)
+        in: query
+        name: actor
+        required: true
+        schema:
+          type: string
+      - description: An RFC 3339 instant; the twin is folded as of that instant
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The view, as-of stamped, with the coverage and provenance metadata
+        '400':
+          description: A missing required query parameter
+        '404':
+          description: No such passport
+      summary: |-
+        GET /view — the projection.
+        The twin-fold view of a passport under a lens, as of an instant:
+        the profile's lens manifest resolved (registry first, fixtures
+        otherwise), the data points presented with the same coverage
+        honesty the render carries, and the roll-up where a sealer is
+        configured.
+      tags:
+      - projection
+  /render/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the served profiles, their endpoint references, the source posture and the response conventions'
+      summary: Serve the discovery document.
+      tags:
+      - gateway
+  /render/admin/feedback:
+    get:
+      operationId: feedback_admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The listing of filed reports
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: |-
+        GET /admin/feedback?limit&offset — the full listing (contacts
+        included), newest first, admin-guarded when a token is configured.
+        The operator's window onto the report channel.
+      tags:
+      - admin
+  /render/en18222/v1/dppsByProductId/{gtin}:
+    get:
+      operationId: en18222_dpps
+      parameters:
+      - description: The GTIN
+        in: path
+        name: gtin
+        required: true
+        schema:
+          type: string
+      - description: '`full` (element tree, string-printed values) or `compressed` (collection-keyed, native JSON values; the default)'
+        in: query
+        name: rendering
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The EN 18222 document, as-of stamped
+        '404':
+          description: The no-information 404 (I12)
+      summary: |-
+        GET /en18222/v1/dppsByProductId/{gtin} — the EN 18222 REST render.
+        Render passports for a GTIN in the EN 18222 REST shape (full or
+        compressed; the default is compressed per the EN).
+      tags:
+      - gateway
+  /render/feedback:
+    post:
+      operationId: submit_feedback
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The report: its type, the subject identifier and the statement'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Filed; the receipt carries the sequence number that cites it
+        '400':
+          description: An unparseable or mistyped report
+        '429':
+          description: The admission control refused the report as a flood
+      summary: |-
+        POST /feedback — the consumer report channel (TODO.impl 224):
+        a stated report path on the public edge. The typed categories are
+        MobileQR's two (goods-mismatch 实物不符 / advertising-mismatch 宣传
+        不符) plus a stated free-form other; admission control is the
+        deployment's pluggable choice (a rate window here; captcha + SMS
+        behind the same trait in a deployment that runs them); every
+        admitted report is journaled and acknowledged with its sequence
+        and instant.
+        File a consumer report through the report channel (typed,
+        journaled, receipted; the pluggable admission control decides
+        what a flood is).
+      tags:
+      - gateway
+  /render/feedback/{seq}:
+    get:
+      operationId: feedback_citation
+      parameters:
+      - description: The receipt sequence number
+        in: path
+        name: seq
+        required: true
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The report, byte-identical on every read
+        '404':
+          description: No report carries this sequence number
+      summary: |-
+        GET /feedback/{seq} — the public citation form: the report by
+        sequence with the contact withheld (stated, never silent).
+        Retrieve one filed report by its receipt sequence number.
+      tags:
+      - gateway
+  /render/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: The service is serving
+      summary: Liveness probe.
+      tags:
+      - gateway
+  /render/scan-tokens:
+    post:
+      operationId: issue_scan_token
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The issuance request under the deployment's scan policy (rate and ttl are manifest data)
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Issued; the token and its expiry are stated
+        '401':
+          description: The issuance credential is required and absent
+        '429':
+          description: The policy's per-minute limit is reached
+      summary: |-
+        POST /scan-tokens {source} — issue a scan token under the
+        configured policy (the gate states where the policy came from; no
+        policy configured = the gate is open and issuance is a stated
+        no-op). The source names the requester in production set by the
+        fronting proxy (X-UniDPP-Source is accepted here).
+        Issue a scan token (the scan-policy gate: a scan-gated deployment
+        answers unauthenticated mark reads with a stated 401 naming this
+        endpoint; absent policy, reads are free).
+      tags:
+      - gateway
+  /render/untp/ingest:
+    post:
+      operationId: untp_ingest
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: The UNTP document to import
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Matched (the subject already exists; the import is an identity)
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Imported (new subject)
+        '422':
+          description: The document is well-formed JSON but not a conforming UNTP rendering
+      summary: |-
+        POST /untp/ingest — the import direction: a UNTP passport VC (bare
+        or the triad this gateway renders) mints a neutral-core passport
+        with a deterministic identity; conformity credentials land as
+        profile bindings. Idempotent per subject identity.
+        Ingest a UNTP document back into the neutral core (render and
+        ingest are inverse projections; imported documents carry an empty
+        log and the receipt records the origin).
+      tags:
+      - gateway
+  /render/untp/product/{id}:
+    get:
+      operationId: untp_product
+      parameters:
+      - description: The product identifier (core cpid or GS1 family element string)
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The UNTP triad, as-of stamped
+        '404':
+          description: 'The no-information 404: identical bytes for unknown and deliberately unresolvable ids (I12)'
+      summary: |-
+        GET /untp/product/{id} — the verifiable-credential triad + verdict.
+        Render one passport in the UNTP verifiable-credential triad
+        (DigitalProductPassport VC + DigitalConformityCredentials + the
+        link-resolver entry) — one neutral core, a C4 protocol rendering.
+      tags:
+      - gateway
+  /archive/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the service identity and build, the ISO 14721 (OAIS) role mapping, the notarization suite and statement recipe, the anchoring semantics and the explicit unanchored fallback, the journal and snapshot-store layout, the as-of query conventions and the bearer-guard posture'
+      summary: |-
+        Serve the discovery document: the service identity, the OAIS
+        mapping, the notarization recipe, the anchoring semantics, the
+        storage layout and the entry points.
+      tags:
+      - archive
+  /archive/admin/log:
+    get:
+      operationId: admin_log
+      parameters:
+      - description: Records to return (default 100, maximum 10 000)
+        in: query
+        name: limit
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      - description: Records to skip (default 0)
+        in: query
+        name: offset
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The journal window
+        '401':
+          description: A bearer token is configured and the request does not carry it
+      summary: Read the append-only audit journal.
+      tags:
+      - admin
+  /archive/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The service is serving; the snapshot count and the anchoring posture are stated
+      summary: Serve the liveness document.
+      tags:
+      - archive
+  /archive/keyring:
+    get:
+      operationId: keyring
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The notary anchor: the keyring mode, the suite, the key id, the Ed25519 public anchor, the verification recipe and, in seeded-dev mode, the warning'
+      summary: Serve the notary keyring a verifier pins.
+      tags:
+      - archive
+  /archive/snapshots:
+    get:
+      operationId: list_snapshots
+      parameters:
+      - description: List only the snapshots of this passport
+        in: query
+        name: passport_id
+        required: false
+        schema:
+          type: string
+      - description: 'An RFC 3339 instant; the catalogue is evaluated as of that instant (alias: `asof`), and the answer is immutable and cacheable forever'
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The catalogue: every snapshot notarized at or before the effective instant, with the query echo, the count, the fixity digests, the anchoring summary and the per-snapshot `href`'
+        '400':
+          description: The `at` parameter is not a parseable instant
+      summary: List the snapshots in the as-of catalogue (OAIS data management).
+      tags:
+      - archive
+    post:
+      operationId: create_snapshot
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The SIP: `{"passport_id": ..., "state_hash": ..., "log_head": ...}`; optional `submitter` and `state_size`'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: The snapshot is notarized and stored; the AIP document is returned with the `Location`, `ETag`, `X-Snapshot-Id` and `X-As-Of` headers, and `X-Anchored-Receipt` when the transparency log anchored the commitment
+        '400':
+          description: Invalid JSON, a missing or malformed `passport_id`, `state_hash` or `log_head`, or an invalid optional field
+        '401':
+          description: A bearer token is configured and the request does not carry it
+        '409':
+          description: The storage reports a sequence conflict
+        '500':
+          description: Notarization failed or the storage reported an integrity failure
+      summary: |-
+        Ingest a snapshot: the OAIS submission is notarized into the
+        archival package.
+      tags:
+      - admin
+  /archive/snapshots/{id}:
+    get:
+      operationId: get_snapshot
+      parameters:
+      - description: The snapshot identifier, as returned by the ingest response and the as-of catalogue
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The archival package is re-rendered from the journaled record byte-identically; the strong `ETag` pins the body digest and the `X-As-Of` header carries the notarization instant
+        '404':
+          description: No snapshot carries the requested identifier
+      summary: Re-serve a stored snapshot byte-identically (OAIS access).
+      tags:
+      - archive
+  /relay/:
+    get:
+      operationId: discovery
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The discovery document: the service identity, the hub id, the endpoint map and the contract statements — statelessness, two-way willingness, signed relays, no master'
+      summary: Serve the discovery document.
+      tags:
+      - hub
+  /relay/healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: The service is serving
+      summary: Answer the liveness probe.
+      tags:
+      - hub
+  /relay/keyring:
+    get:
+      operationId: keyring
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The keyring: the relay role''s suite and public key, under which every relay signature verifies, and the keyring mode'
+      summary: Serve the hub's public key.
+      tags:
+      - hub
+  /relay/relay:
+    post:
+      description: |-
+        The hub checks willingness both ways, forwards the evidence bytes,
+        signs the relay in the HUB-RELAY domain over the forwarded bytes
+        plus the relay metadata, and retains nothing.
+      operationId: relay
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The relay request: `{"from": ..., "to": ..., "data_class": ..., "evidence_hex": ..., "declarations": [declaration, ...]}` — the declarations carry both sides'' published interoperability postures, because the hub holds no posture state of its own'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The evidence is relayed: the signed relay (hub id, parties, class, evidence digest, signature) and the forwarded bytes are returned, and nothing is retained'
+        '400':
+          content:
+            application/json:
+              schema: {}
+          description: Invalid JSON syntax, or an `evidence_hex` that is not hex
+        '415':
+          content:
+            application/json:
+              schema: {}
+          description: The request carries no `application/json` content type
+        '422':
+          content:
+            application/json:
+              schema: {}
+          description: 'The relay is refused: a side declines the class or publishes no declaration for it; the refusal states the declining side and the gap, and carries `refused: true`'
+      summary: Relay evidence between two willing schemes.
+      tags:
+      - hub
+  /relay/relay/verify:
+    post:
+      description: |-
+        The check is the recipient's, offered by the hub itself so that
+        any third party can run the verification without linking the
+        crate; linking the crate is equally conforming.
+      operationId: relay_verify
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        description: 'The verification request: `{"evidence_hex": ..., "relay": {..}}` — the relay exactly as returned by `POST /relay`'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: 'The verification verdict: `verified` is `true` and the evidence digest is stated, or `verified` is `false` and the verification error is stated; both outcomes answer 200'
+        '400':
+          content:
+            application/json:
+              schema: {}
+          description: Invalid JSON syntax, or an `evidence_hex` that is not hex
+        '415':
+          content:
+            application/json:
+              schema: {}
+          description: The request carries no `application/json` content type
+        '422':
+          content:
+            application/json:
+              schema: {}
+          description: The body does not deserialize into a relay verification request
+      summary: Verify a relayed evidence under this hub's key.
+      tags:
+      - hub
