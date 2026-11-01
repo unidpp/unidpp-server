@@ -34,6 +34,12 @@ async fn the_one_server_serves_the_whole_estate() {
         "UNIDPP_GATEWAY_FEEDBACK_JOURNAL",
         dir("feedback-journal.jsonl"),
     );
+    // The federation-peer mount rides the same test: one process,
+    // two registries, distinct journals.
+    std::env::set_var(
+        "UNIDPP_SERVER_JP_STATE_FILE",
+        dir("jp-registry-journal.jsonl"),
+    );
 
     let app = unidpp_server::build_router().expect("router builds");
 
@@ -79,6 +85,26 @@ async fn the_one_server_serves_the_whole_estate() {
             "{name}: the served contract differs from the repo golden"
         );
     }
+
+    // The peer mount: a second registry, its own journal, the same
+    // golden contract behind its prefix.
+    let registry_golden = MODULES
+        .iter()
+        .find(|(name, _, _)| *name == "registry")
+        .map(|(_, _, yaml)| *yaml)
+        .expect("registry in MODULES");
+    let response = get(&app, "/registry-jp/healthz").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "GET /registry-jp/healthz"
+    );
+    let response = get(&app, "/registry-jp/openapi.yaml").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    assert_eq!(bytes.as_ref(), registry_golden.as_bytes());
 
     // The union document equals its committed golden.
     let response = get(&app, "/openapi.yaml").await;

@@ -16,6 +16,10 @@ use serde_json::json;
 
 /// The deployment's bind address (`UNIDPP_SERVER_BIND`).
 pub const BIND_KEY: &str = "UNIDPP_SERVER_BIND";
+/// The optional federation-peer registry's journal
+/// (`UNIDPP_SERVER_JP_STATE_FILE`): when set, a second registry
+/// instance mounts at `/registry-jp`.
+pub const JP_STATE_KEY: &str = "UNIDPP_SERVER_JP_STATE_FILE";
 const DEFAULT_BIND: &str = "127.0.0.1:8090";
 
 fn other<E: std::fmt::Display>(error: E) -> std::io::Error {
@@ -119,7 +123,7 @@ pub fn build_router() -> std::io::Result<Router> {
 
     let relay = Arc::new(unidpp_hub::AppState::new(unidpp_hub::Config::from_env()).map_err(other)?);
 
-    Ok(Router::new()
+    let mut router = Router::new()
         .nest("/registry", unidpp_registry::api::router(registry))
         .nest("/trust", unidpp_trust::api::router(trust))
         .nest("/log", unidpp_log::api::router(log))
@@ -127,7 +131,22 @@ pub fn build_router() -> std::io::Result<Router> {
         .nest("/views", unidpp_projector::api::router(views))
         .nest("/render", unidpp_gateway::router(render))
         .nest("/archive", unidpp_archive::api::router(archive))
-        .nest("/relay", unidpp_hub::router(relay))
+        .nest("/relay", unidpp_hub::router(relay));
+
+    // The optional federation-peer mount: a second registry instance
+    // with its own journal (the reference deployment's JP peer, one
+    // process). Absent state file, absent mount.
+    if let Some(jp_state_file) = std::env::var(JP_STATE_KEY)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let mut jp_config = unidpp_registry::Config::from_env();
+        jp_config.state_file = Some(jp_state_file.into());
+        let jp = Arc::new(unidpp_registry::api::AppState::new(jp_config)?);
+        router = router.nest("/registry-jp", unidpp_registry::api::router(jp));
+    }
+
+    Ok(router
         .route("/", get(discovery))
         .route("/healthz", get(healthz))
         .route("/openapi.yaml", get(openapi_yaml))
