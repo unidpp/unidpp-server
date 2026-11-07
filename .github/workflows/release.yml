@@ -1,0 +1,72 @@
+name: release
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: unidpp-server
+      # The one server compiles the eight module crates and their
+      # transitive path-deps, so the build checks out the family.
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-registry, path: unidpp-registry }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-trust, path: unidpp-trust }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-log, path: unidpp-log }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-issuer, path: unidpp-issuer }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-projector, path: unidpp-projector }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-gateway, path: unidpp-gateway }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-archive, path: unidpp-archive }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-hub, path: unidpp-hub }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-core, path: unidpp-core }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-signatif, path: unidpp-signatif }
+      - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-cli, path: unidpp-cli }
+      - name: Build the release binary
+        working-directory: unidpp-server
+        run: cargo build --release
+      - name: Stage the distribution
+        run: |
+          DIR="unidpp-server-${{ matrix.target }}"
+          mkdir "$DIR"
+          cp unidpp-server/target/release/unidpp-server "$DIR/"
+          cp unidpp-server/README.md unidpp-server/LICENSE "$DIR/"
+          tar czf "unidpp-server-${{ matrix.target }}.tar.gz" "$DIR"
+          sha256sum "unidpp-server-${{ matrix.target }}.tar.gz" > "unidpp-server-${{ matrix.target }}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unidpp-server-${{ matrix.target }}
+          path: |
+            unidpp-server-${{ matrix.target }}.tar.gz
+            unidpp-server-${{ matrix.target }}.tar.gz.sha256
+      - name: Attach to the tagged release (a version is the owner's decision; only a pushed tag cuts one)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            unidpp-server-${{ matrix.target }}.tar.gz
+            unidpp-server-${{ matrix.target }}.tar.gz.sha256
