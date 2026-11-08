@@ -60,8 +60,10 @@ async fn the_one_server_serves_the_whole_estate() {
     std::env::set_var("UNIDPP_ISSUER_STATE_FILE", dir("issuer-state.jsonl"));
     std::env::set_var("UNIDPP_ARCHIVE_STATE_FILE", dir("archive-state.jsonl"));
     std::env::set_var("UNIDPP_ARCHIVE_SNAPSHOT_DIR", dir("archive-snapshots"));
-    std::env::set_var("UNIDPP_PROJECTOR_PASSPORTS_DIR", dir("passports"));
-    std::env::set_var("UNIDPP_PROJECTOR_PRIMMEL_DIR", dir("primmel"));
+    // The projector's passports dir stays unset: the built-in demo
+    // passport serves the lens read, whose registry leg is what the
+    // R7 assertions ride.
+    std::env::remove_var("UNIDPP_PROJECTOR_PASSPORTS_DIR");
     std::env::set_var(
         "UNIDPP_GATEWAY_FEEDBACK_JOURNAL",
         dir("feedback-journal.jsonl"),
@@ -81,6 +83,12 @@ async fn the_one_server_serves_the_whole_estate() {
     .expect("manifest written");
     std::env::set_var("UNIDPP_CONSOLE_MANIFEST", dir("unidpp-operator.yaml"));
     std::env::set_var("UNIDPP_IDENTITY_STATE_FILE", dir("identity-journal.jsonl"));
+    // The R7 edges ride their configured sibling URLs (the bridge
+    // replaces the loopback HTTP client when the edge is configured).
+    std::env::set_var("UNIDPP_ISSUER_REGISTRY_URL", "http://127.0.0.1:1");
+    std::env::set_var("UNIDPP_REGISTRY_URL", "http://127.0.0.1:1");
+    std::env::set_var("UNIDPP_GATEWAY_ISSUER_URL", "http://127.0.0.1:1");
+    std::env::set_var("UNIDPP_LOG_URL", "http://127.0.0.1:1");
 
     let app = unidpp_server::build_router().expect("router builds");
 
@@ -184,6 +192,116 @@ async fn the_one_server_serves_the_whole_estate() {
         .expect("probe request");
     let response = app.clone().oneshot(request).await.expect("probe answered");
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    // -----------------------------------------------------------------
+    // The edges become function calls (REARCH R7): with the four
+    // sibling URLs configured, the served_router injects the
+    // in-process bridges — issuer→registry, projector→registry,
+    // gateway→issuer, archive→log — and each edge keeps its own
+    // outcome semantics without touching sockets.
+    // -----------------------------------------------------------------
+    // 1. issuer→registry: the forwarded registration lands in the
+    // shared registry in the same process (`via` names it).
+    let response = post_json(
+        &app,
+        "/issuer/admin/profiles",
+        r#"{"profile_id":"urn:unidpp:profile:r7-parity","definition":"The one-deployment parity profile","register_id":"unidpp-issuer"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "the issuer registers the profile"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let registered: serde_json::Value = serde_json::from_slice(&body).expect("record parses");
+    assert_eq!(
+        registered["via"], "registry",
+        "the forward rode the in-process bridge, not fixtures"
+    );
+    let response = get(&app, "/registry/profiles/urn:unidpp:profile:r7-parity").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "the shared registry holds the forwarded profile"
+    );
+
+    // 2. gateway→issuer: a passport the issuer issued renders through
+    // the gateway, resolved in process.
+    let response = post_json(
+        &app,
+        "/issuer/passports",
+        r#"{"identity":"https://product.example.org/r7-parity"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED, "the issuer issues");
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let issued: serde_json::Value = serde_json::from_slice(&body).expect("record parses");
+    let issued_id = issued["passport_id"]
+        .as_str()
+        .expect("passport id")
+        .to_string();
+    let response = get(&app, &format!("/render/untp/product/{issued_id}")).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "the gateway resolves the issued passport in process"
+    );
+
+    // 3. archive→log: a snapshot anchors through the in-process log
+    // (no UNIDPP_LOG_URL socket was ever opened; the receipt is the
+    // log module's own).
+    let response = post_json(
+        &app,
+        "/archive/snapshots",
+        r#"{"passport_id":"urn:unidpp:passport:r7-parity","state_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","log_head":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","submitter":"r7-test"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "the archive notarizes the snapshot"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let snapshot: serde_json::Value = serde_json::from_slice(&body).expect("record parses");
+    assert_eq!(
+        snapshot["oais"]["provenance"]["anchoring"]["status"], "anchored",
+        "the commitment anchored through the in-process log: {}",
+        snapshot["oais"]["provenance"]["anchoring"]
+    );
+
+    // 4. projector→registry: with the registry configured, a lens the
+    // registry does not carry is a stated registry miss — the read
+    // reached the live registry in process (the fixtures fallback is
+    // the unconfigured case, unchanged).
+    let response = get(
+        &app,
+        "/views/view?passport=urn:iso:std:iso-iec:15459:unidpp:passport:84120099012345&profile=urn:unidpp:profile:eu-battery-lens&actor=r7-test",
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "the registry miss is stated, not papered over"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let miss: serde_json::Value = serde_json::from_slice(&body).expect("refusal parses");
+    let miss_text = miss.to_string();
+    assert!(
+        miss_text.contains("registry"),
+        "the miss names the registry: {miss_text}"
+    );
 
     // -----------------------------------------------------------------
     // The identity flow (REARCH R4/R5), last because enrollment closes

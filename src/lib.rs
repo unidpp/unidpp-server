@@ -202,9 +202,15 @@ fn tenants_router() -> std::io::Result<Vec<(String, Router)>> {
 fn served_router(
     identity_state: std::sync::Arc<identity::api::IdentityState>,
 ) -> std::io::Result<Router> {
+    // The provider modules come first: their routers carry the
+    // in-process bridges the consumer modules ride (REARCH R7) — the
+    // issuer reads the registry, the projector reads the registry,
+    // the gateway reads the issuer, and the archive anchors into the
+    // log, all as function calls inside this process.
     let registry = Arc::new(unidpp_registry::api::AppState::new(
         unidpp_registry::Config::from_env(),
     )?);
+    let registry_router = unidpp_registry::api::router(registry.clone());
 
     let trust_config = unidpp_trust::Config::from_env();
     let (trust_keyring, warnings) =
@@ -219,20 +225,48 @@ fn served_router(
 
     let log_config = unidpp_log::Config::from_env().map_err(other)?;
     let log = Arc::new(unidpp_log::api::AppState::new(log_config).map_err(other)?);
+    let log_router = unidpp_log::api::router(log.clone());
 
     let (issuer_config, warnings) = unidpp_issuer::Config::from_env();
     if let Some(warning) = &warnings {
         eprintln!("unidpp-issuer: {warning}");
     }
-    let issuer = Arc::new(unidpp_issuer::api::AppState::new(issuer_config)?);
+    let issuer_registry_token = issuer_config.registry_token.clone();
+    let issuer_registry_url = issuer_config.registry_url.clone();
+    let issuer_base = unidpp_issuer::api::AppState::new(issuer_config)?;
+    let issuer = Arc::new(match issuer_registry_url {
+        // The bridge replaces the loopback HTTP client when the edge
+        // is configured; an unconfigured edge keeps its degrade
+        // contract (fixtures) untouched.
+        Some(_) => issuer_base.with_registry_bridge(Arc::new(unidpp_issuer::InProcessRegistry {
+            router: registry_router.clone(),
+            bearer: issuer_registry_token,
+        })),
+        None => issuer_base,
+    });
+    let issuer_router = unidpp_issuer::api::router(issuer.clone());
 
-    let views = Arc::new(unidpp_projector::api::AppState::new(
-        unidpp_projector::Config::from_env(),
-    ));
+    let views_config = unidpp_projector::Config::from_env();
+    let views_registry_url = views_config.registry_url.clone();
+    let views_base = unidpp_projector::api::AppState::new(views_config);
+    let views = Arc::new(match views_registry_url {
+        Some(_) => views_base.with_registry_bridge(Arc::new(unidpp_projector::InProcessRegistry {
+            router: registry_router.clone(),
+        })),
+        None => views_base,
+    });
 
-    let render = Arc::new(unidpp_gateway::AppState::new(
-        unidpp_gateway::Config::from_env(),
-    ));
+    let render_config = unidpp_gateway::Config::from_env();
+    let render_issuer_url = render_config.issuer_url.clone();
+    let render_base = unidpp_gateway::AppState::new(render_config);
+    let render = Arc::new(match render_issuer_url {
+        Some(_) => {
+            render_base.with_issuer_bridge(Arc::new(unidpp_gateway::source::InProcessIssuer {
+                router: issuer_router.clone(),
+            }))
+        }
+        None => render_base,
+    });
 
     let archive_config = unidpp_archive::Config::from_env();
     let (archive_keyring, warnings) =
@@ -240,17 +274,25 @@ fn served_router(
     for warning in &warnings {
         eprintln!("unidpp-archive: {warning}");
     }
-    let archive = Arc::new(
-        unidpp_archive::api::AppState::new(archive_config, archive_keyring).map_err(other)?,
-    );
+    let archive_log_url = archive_config.log.base_url.clone();
+    let archive_log_bearer = archive_config.log.bearer.clone();
+    let archive_base =
+        unidpp_archive::api::AppState::new(archive_config, archive_keyring).map_err(other)?;
+    let archive = Arc::new(match archive_log_url {
+        Some(_) => archive_base.with_log_bridge(Arc::new(unidpp_archive::InProcessLog {
+            router: log_router.clone(),
+            bearer: archive_log_bearer,
+        })),
+        None => archive_base,
+    });
 
     let relay = Arc::new(unidpp_hub::AppState::new(unidpp_hub::Config::from_env()).map_err(other)?);
 
     let mut router = Router::new()
-        .nest("/registry", unidpp_registry::api::router(registry))
+        .nest("/registry", registry_router)
         .nest("/trust", unidpp_trust::api::router(trust))
-        .nest("/log", unidpp_log::api::router(log))
-        .nest("/issuer", unidpp_issuer::api::router(issuer))
+        .nest("/log", log_router)
+        .nest("/issuer", issuer_router)
         .nest("/views", unidpp_projector::api::router(views))
         .nest("/render", unidpp_gateway::router(render))
         .nest("/archive", unidpp_archive::api::router(archive))
