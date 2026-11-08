@@ -22,10 +22,12 @@ unidpp-gateway = { path = "../unidpp-gateway" }
 unidpp-archive = { path = "../unidpp-archive" }
 unidpp-hub = { path = "../unidpp-hub" }
 unidpp-console = { path = "../unidpp-console" }
+unidpp-config = { path = "../unidpp-config" }
 unidpp-model = { path = "../unidpp-core/crates/model" }
 
-[dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+
+[dev-dependencies]
 tempfile = "3"
 
 [[bin]]

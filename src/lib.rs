@@ -88,8 +88,120 @@ async fn fallback() -> Response {
 /// The whole estate as one router. Each module keeps its own env
 /// contract (`Config::from_env`); the runner sets the keys under one
 /// data root and points every inter-module `*_URL` at its prefixed
-/// base on this same origin (D4/D7).
+/// base on this same origin (D4/D7). When
+/// `UNIDPP_SERVER_TENANTS_DIR` names a folder of tenant manifests,
+/// every tenant is served from the same process: its own module
+/// states, its own identity, dispatched by Host header (REARCH R6).
 pub fn build_router() -> std::io::Result<Router> {
+    let identity_state = std::sync::Arc::new(identity::api::IdentityState::from_env());
+    let base = served_router(identity_state.clone())?.layer(axum::middleware::from_fn_with_state(
+        identity_state.clone(),
+        identity::enforce::enforce,
+    ));
+    let tenants = tenants_router()?;
+    if tenants.is_empty() {
+        Ok(base)
+    } else {
+        Ok(base.layer(axum::middleware::from_fn_with_state(
+            std::sync::Arc::new(identity::dispatch::TenantTable {
+                entries: std::sync::Arc::new(tenants),
+            }),
+            identity::dispatch::dispatch,
+        )))
+    }
+}
+
+/// The tenant table: every folder under `UNIDPP_SERVER_TENANTS_DIR`
+/// that carries an operator manifest becomes a served tenant, its
+/// environment rendered from its own manifest and its data rooted in
+/// its own folder.
+fn tenants_router() -> std::io::Result<Vec<(String, Router)>> {
+    let Some(dir) = std::env::var("UNIDPP_SERVER_TENANTS_DIR")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+    else {
+        return Ok(Vec::new());
+    };
+    let mut tenants = Vec::new();
+    let mut entries: Vec<_> = std::fs::read_dir(&dir)
+        .map_err(std::io::Error::other)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().join("unidpp-operator.yaml").is_file())
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let tenant_dir = entry.path();
+        let id = entry.file_name().to_string_lossy().into_owned();
+        let manifest_path = tenant_dir.join("unidpp-operator.yaml");
+        let text = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| std::io::Error::other(format!("{id}: {e}")))?;
+        let manifest = unidpp_config::load(&text)
+            .map_err(|e| std::io::Error::other(format!("{id}: manifest: {e}")))?;
+        // The tenant's environment: its manifest renders every
+        // declared service; the state files resolve inside the
+        // tenant folder; the shared origin serves the modules.
+        let origin = origin();
+        for service in manifest.service_names() {
+            if let Ok(rendered) = unidpp_config::render_env(&manifest, service) {
+                for line in rendered.lines() {
+                    if let Some((k, v)) = line.split_once('=') {
+                        std::env::set_var(k, v);
+                    }
+                }
+            }
+        }
+        for (k, v) in [
+            (
+                "UNIDPP_ISSUER_REGISTRY_URL".to_string(),
+                format!("{origin}/registry"),
+            ),
+            ("UNIDPP_LOG_URL".to_string(), format!("{origin}/log")),
+            (
+                "UNIDPP_IDENTITY_STATE_FILE".to_string(),
+                tenant_dir
+                    .join("identity-journal.jsonl")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            (
+                "UNIDPP_CONSOLE_MANIFEST".to_string(),
+                manifest_path.to_string_lossy().into_owned(),
+            ),
+            ("UNIDPP_SERVER_TENANT".to_string(), id.clone()),
+        ] {
+            std::env::set_var(&k, &v);
+        }
+        let hostname = manifest
+            .deployment
+            .base_url
+            .split("://")
+            .nth(1)
+            .unwrap_or("")
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        if hostname.is_empty() {
+            return Err(std::io::Error::other(format!(
+                "tenant {id}: the manifest carries no usable base_url"
+            )));
+        }
+        let identity_state = std::sync::Arc::new(identity::api::IdentityState::from_env());
+        let router = served_router(identity_state.clone())?.layer(
+            axum::middleware::from_fn_with_state(identity_state, identity::enforce::enforce),
+        );
+        tenants.push((hostname, router));
+    }
+    Ok(tenants)
+}
+
+/// The served router for ONE environment: the module nests, the
+/// optional mounts, the deployment's own surface — everything but
+/// the enforcement layer, which the caller applies with its own
+/// identity state.
+fn served_router(
+    identity_state: std::sync::Arc<identity::api::IdentityState>,
+) -> std::io::Result<Router> {
     let registry = Arc::new(unidpp_registry::api::AppState::new(
         unidpp_registry::Config::from_env(),
     )?);
@@ -133,11 +245,6 @@ pub fn build_router() -> std::io::Result<Router> {
     );
 
     let relay = Arc::new(unidpp_hub::AppState::new(unidpp_hub::Config::from_env()).map_err(other)?);
-
-    // The identity state: actors, scoped credentials, and the
-    // enforcement gate's knowledge (REARCH R4/R5). The middleware
-    // wraps the finished router below, so it sees every module path.
-    let identity_state = std::sync::Arc::new(identity::api::IdentityState::from_env());
 
     let mut router = Router::new()
         .nest("/registry", unidpp_registry::api::router(registry))
@@ -186,11 +293,7 @@ pub fn build_router() -> std::io::Result<Router> {
         .route("/openapi.yaml", get(openapi_yaml))
         .route("/openapi.json", get(openapi_json))
         .route("/version", get(version))
-        .fallback(fallback)
-        .layer(axum::middleware::from_fn_with_state(
-            identity_state,
-            identity::enforce::enforce,
-        )))
+        .fallback(fallback))
 }
 
 /// Bind and serve until stopped (used by `main`).

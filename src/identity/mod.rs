@@ -6,6 +6,7 @@
 //! rotation history reads from the store itself.
 
 pub mod api;
+pub mod dispatch;
 pub mod enforce;
 pub mod scope;
 

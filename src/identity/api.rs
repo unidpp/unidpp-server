@@ -28,6 +28,9 @@ pub struct IdentityState {
     store: RwLock<IdentityStore>,
     journal_path: Option<PathBuf>,
     operator_token: Option<String>,
+    /// The tenant scope this state serves (REARCH R6): `None` for the
+    /// reference deployment, the folder name for a tenant mount.
+    tenant: Option<String>,
 }
 
 impl IdentityState {
@@ -57,6 +60,9 @@ impl IdentityState {
             store: RwLock::new(store),
             journal_path,
             operator_token,
+            tenant: std::env::var("UNIDPP_SERVER_TENANT")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
         }
     }
 
@@ -501,6 +507,7 @@ async fn whoami(
             "credential": resolved.credential.id,
             "scopes": resolved.credential.scopes,
             "operator": operator,
+            "tenant": state.tenant,
         }),
         StatusCode::OK,
     )
