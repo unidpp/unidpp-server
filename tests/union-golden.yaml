@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: UniDPP — the one deployment
   version: 0.1.0
-  description: 'UniDPP serves the whole estate as one deployment: every module (registry, trust, log, issuer, views, render, archive, relay, console) keeps its own contract behind its prefix, and this document is the union of them. Each module''s golden document is served byte-identically at `/<module>/openapi.yaml`; this document exists so a client of the whole deployment reads one surface.'
+  description: 'UniDPP serves the whole estate as one deployment: every module (registry, trust, log, issuer, views, render, archive, relay, console, identity) keeps its own contract behind its prefix, and this document is the union of them. Each module''s golden document is served byte-identically at `/<module>/openapi.yaml`; this document exists so a client of the whole deployment reads one surface.'
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -67,6 +67,8 @@ info:
   - UNIDPP_CONSOLE_BIND
   - UNIDPP_CONSOLE_MANIFEST
   - UNIDPP_CONSOLE_ADMIN_TOKEN
+  - UNIDPP_IDENTITY_STATE_FILE
+  - UNIDPP_SERVER_OPERATOR_TOKEN
 servers:
 - url: /
 tags:
@@ -96,6 +98,8 @@ tags:
   name: hub
 - description: The session-gated operator surface
   name: console
+- description: Actors, credentials and the scope table
+  name: identity
 paths:
   /registry/:
     get:
@@ -3163,3 +3167,261 @@ paths:
       summary: 'The trust view: operators, trust markers and validity windows.'
       tags:
       - console
+  /identity/identity/actors:
+    get:
+      operationId: actors
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actors'
+          description: The actors
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: The credential lacks `identity:admin`
+      summary: The actors of the deployment (`identity:admin`).
+      tags:
+      - identity
+    post:
+      operationId: enroll
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrolled'
+          description: The actor and its first credential; the bearer is stated once
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: The deployment has actors, and the caller holds no `identity:admin` credential
+      summary: |-
+        Enroll an actor and issue its first credential. While the
+        deployment has enrolled nobody this is the bootstrap and needs no
+        credential; afterwards it is `identity:admin`.
+      tags:
+      - identity
+  /identity/identity/actors/{id}/credentials:
+    post:
+      operationId: issue
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrolled'
+          description: The credential; the bearer is stated once
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: The credential lacks `identity:admin`
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No such actor
+      summary: Issue an additional credential for an actor (`identity:admin`).
+      tags:
+      - identity
+  /identity/identity/credentials:
+    get:
+      operationId: credentials
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credentials'
+          description: The credentials, without secrets
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: The credential lacks `identity:admin`
+      summary: |-
+        The credentials of the deployment (`identity:admin`). Secrets are
+        never stated; the store does not have them.
+      tags:
+      - identity
+  /identity/identity/credentials/{id}/revoke:
+    post:
+      operationId: revoke
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+          description: The credential is revoked
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: Revoking a foreign credential without `identity:admin`
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No such credential
+      summary: |-
+        Revoke a credential. The presenting credential may revoke itself;
+        anything else is `identity:admin`.
+      tags:
+      - identity
+  /identity/identity/credentials/{id}/rotate:
+    post:
+      operationId: rotate
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrolled'
+          description: The rotated credential; the new bearer is stated once
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: Rotating a foreign credential without `identity:admin`
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No such credential
+      summary: |-
+        Rotate a credential: a new link issues, the old revokes, the
+        chain states its predecessor. The presenting credential may
+        rotate itself; anything else is `identity:admin`.
+      tags:
+      - identity
+  /identity/identity/keyring:
+    get:
+      operationId: keyring
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mode'
+          description: The mode truth
+      summary: 'The identity mode: whether enforcement is live and why.'
+      tags:
+      - identity
+  /identity/identity/scopes:
+    get:
+      operationId: scopes
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeTable'
+          description: The scope table
+      summary: 'The scope table: the documented and enforced truth.'
+      tags:
+      - identity
+  /identity/identity/whoami:
+    get:
+      operationId: whoami
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Whoami'
+          description: The resolved credential and actor
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+          description: No credential presented
+      summary: The presenting credential, its actor and its scopes.
+      tags:
+      - identity

@@ -5,6 +5,7 @@
 //! the union contract.
 
 pub mod contract;
+pub mod identity;
 
 use std::sync::Arc;
 
@@ -133,6 +134,11 @@ pub fn build_router() -> std::io::Result<Router> {
 
     let relay = Arc::new(unidpp_hub::AppState::new(unidpp_hub::Config::from_env()).map_err(other)?);
 
+    // The identity state: actors, scoped credentials, and the
+    // enforcement gate's knowledge (REARCH R4/R5). The middleware
+    // wraps the finished router below, so it sees every module path.
+    let identity_state = std::sync::Arc::new(identity::api::IdentityState::from_env());
+
     let mut router = Router::new()
         .nest("/registry", unidpp_registry::api::router(registry))
         .nest("/trust", unidpp_trust::api::router(trust))
@@ -172,13 +178,19 @@ pub fn build_router() -> std::io::Result<Router> {
         router = router.nest("/registry-jp", unidpp_registry::api::router(jp));
     }
 
+    router = router.nest("/identity", identity::api::router(identity_state.clone()));
+
     Ok(router
         .route("/", get(discovery))
         .route("/healthz", get(healthz))
         .route("/openapi.yaml", get(openapi_yaml))
         .route("/openapi.json", get(openapi_json))
         .route("/version", get(version))
-        .fallback(fallback))
+        .fallback(fallback)
+        .layer(axum::middleware::from_fn_with_state(
+            identity_state,
+            identity::enforce::enforce,
+        )))
 }
 
 /// Bind and serve until stopped (used by `main`).

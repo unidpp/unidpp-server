@@ -9,6 +9,38 @@ use unidpp_server::contract::{self, MODULES};
 
 const UNION_GOLDEN: &str = include_str!("union-golden.yaml");
 
+async fn post_json(
+    app: &axum::Router,
+    path: &str,
+    body: &str,
+    bearer: Option<&str>,
+) -> axum::http::Response<Body> {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/json");
+    if let Some(token) = bearer {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    let request = builder
+        .body(Body::from(body.to_string()))
+        .expect("probe request");
+    app.clone().oneshot(request).await.expect("probe answered")
+}
+
+async fn get_with(
+    app: &axum::Router,
+    path: &str,
+    bearer: Option<&str>,
+) -> axum::http::Response<Body> {
+    let mut builder = Request::builder().method("GET").uri(path);
+    if let Some(token) = bearer {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    let request = builder.body(Body::empty()).expect("probe request");
+    app.clone().oneshot(request).await.expect("probe answered")
+}
+
 async fn get(app: &axum::Router, path: &str) -> axum::http::Response<Body> {
     let request = Request::builder()
         .method("GET")
@@ -48,6 +80,7 @@ async fn the_one_server_serves_the_whole_estate() {
     )
     .expect("manifest written");
     std::env::set_var("UNIDPP_CONSOLE_MANIFEST", dir("unidpp-operator.yaml"));
+    std::env::set_var("UNIDPP_IDENTITY_STATE_FILE", dir("identity-journal.jsonl"));
 
     let app = unidpp_server::build_router().expect("router builds");
 
@@ -149,8 +182,164 @@ async fn the_one_server_serves_the_whole_estate() {
         .uri("/healthz")
         .body(Body::empty())
         .expect("probe request");
-    let response = app.oneshot(request).await.expect("probe answered");
+    let response = app.clone().oneshot(request).await.expect("probe answered");
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    // -----------------------------------------------------------------
+    // The identity flow (REARCH R4/R5), last because enrollment closes
+    // the open mode this test started in.
+    // -----------------------------------------------------------------
+    let mode: serde_json::Value = {
+        let response = get(&app, "/identity/keyring").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body reads");
+        serde_json::from_slice(&bytes).expect("mode parses")
+    };
+    assert_eq!(mode["mode"], "open", "an unenrolled deployment serves open");
+
+    // The open-mode write: the deployment has no actors, so a module
+    // admin operation answers as it always has.
+    let response = post_json(&app, "/registry/admin/seed", "{}", None).await;
+    assert!(
+        response.status().as_u16() < 400,
+        "the open mode lets a module admin through: {}",
+        response.status()
+    );
+
+    // Bootstrap enrollment: the first actor needs no credential.
+    let response = post_json(
+        &app,
+        "/identity/actors",
+        r#"{"org":"border-agency","name":"Inspector J","scopes":["registry:admin","issuer:read"]}"#,
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED, "bootstrap enrolls");
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let enrolled: serde_json::Value = serde_json::from_slice(&bytes).expect("enrollment parses");
+    let bearer = enrolled["bearer"]
+        .as_str()
+        .expect("the one-time bearer")
+        .to_string();
+
+    // Enrollment closed the deployment: the same write, unauthenticated,
+    // now refuses with the missing scope named.
+    let response = post_json(&app, "/registry/admin/seed", "{}", None).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // A reader credential doing an admin write: the scope is named.
+    let reader = post_json(
+        &app,
+        "/identity/actors",
+        r#"{"org":"bike-club","name":"Curious Reader","scopes":["views:read"]}"#,
+        None,
+    )
+    .await;
+    assert_eq!(
+        reader.status(),
+        StatusCode::UNAUTHORIZED,
+        "a second bootstrap is refused: the deployment is closed"
+    );
+    let response = post_json(&app, "/registry/admin/seed", "{}", Some(&bearer)).await;
+    assert!(
+        response.status().as_u16() < 400,
+        "the scoped credential acts: {}",
+        response.status()
+    );
+
+    // The negative per-role probe: a registry credential is not a
+    // views reader.
+    let response = get_with(&app, "/views/openapi.yaml", None).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = get_with(&app, "/trust/keyring", Some(&bearer)).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let refusal: serde_json::Value = serde_json::from_slice(&body).expect("refusal parses");
+    assert_eq!(refusal["missing_scope"], "trust:read");
+
+    // whoami states the actor and its scopes.
+    let response = get_with(&app, "/identity/whoami", Some(&bearer)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let who: serde_json::Value = serde_json::from_slice(&body).expect("whoami parses");
+    assert_eq!(who["org"], "border-agency");
+
+    // Self-rotation: the new link works, the old is refused.
+    let credential_id = enrolled["credential"]
+        .as_str()
+        .expect("credential id")
+        .to_string();
+    let response = post_json(
+        &app,
+        &format!("/identity/credentials/{credential_id}/rotate"),
+        r#"{"reason":"scheduled"}"#,
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let rotated: serde_json::Value = serde_json::from_slice(&body).expect("rotation parses");
+    let new_bearer = rotated["bearer"].as_str().expect("new bearer").to_string();
+    let old_response = get_with(&app, "/identity/whoami", Some(&bearer)).await;
+    assert_eq!(
+        old_response.status(),
+        StatusCode::UNAUTHORIZED,
+        "the old link revokes"
+    );
+    let new_response = get_with(&app, "/identity/whoami", Some(&new_bearer)).await;
+    assert_eq!(
+        new_response.status(),
+        StatusCode::OK,
+        "the new link resolves"
+    );
+
+    // Self-revocation of the new link, stated with a reason.
+    let new_id = rotated["credential"]
+        .as_str()
+        .expect("new credential id")
+        .to_string();
+    let response = post_json(
+        &app,
+        &format!("/identity/credentials/{new_id}/revoke"),
+        r#"{"reason":"test over"}"#,
+        Some(&new_bearer),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let gone = get_with(&app, "/identity/whoami", Some(&new_bearer)).await;
+    assert_eq!(
+        gone.status(),
+        StatusCode::UNAUTHORIZED,
+        "the revoked link refuses"
+    );
+
+    // The scope table: every module carries its scopes.
+    let response = get(&app, "/identity/scopes").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let table: serde_json::Value = serde_json::from_slice(&body).expect("table parses");
+    let modules = table["modules"].as_array().expect("module rows");
+    assert!(modules.len() >= 8, "the table covers the modules");
+    let mode_response = get(&app, "/identity/keyring").await;
+    let body = axum::body::to_bytes(mode_response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let mode_after: serde_json::Value = serde_json::from_slice(&body).expect("mode parses");
+    assert_eq!(
+        mode_after["mode"], "enforcing",
+        "enrollment closed the mode"
+    );
 }
 
 #[test]
@@ -205,11 +394,16 @@ fn the_union_contract_is_well_formed() {
 }
 
 #[test]
-#[ignore = "regenerates tests/union-golden.yaml: cargo test -- --ignored export_golden"]
+#[ignore = "regenerates tests/union-golden.yaml + openapi/identity.yaml: cargo test -- --ignored export_golden"]
 fn export_golden() {
     std::fs::write(
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/union-golden.yaml"),
         contract::contract_yaml(),
     )
-    .expect("golden written");
+    .expect("union golden written");
+    std::fs::write(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/openapi/identity.yaml"),
+        unidpp_server::identity::api::contract_yaml(),
+    )
+    .expect("identity golden written");
 }
