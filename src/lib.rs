@@ -30,6 +30,16 @@ fn as_of() -> String {
     unidpp_model::time::Timestamp::now().to_string()
 }
 
+/// This deployment's own loopback origin (the bind it is about to
+/// serve on): the embedded console routes its module calls here.
+fn origin() -> String {
+    let bind = std::env::var(BIND_KEY)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_BIND.to_string());
+    format!("http://{}", bind)
+}
+
 fn json_response(body: serde_json::Value) -> Response {
     (StatusCode::OK, [("x-as-of", as_of())], Json(body)).into_response()
 }
@@ -132,6 +142,22 @@ pub fn build_router() -> std::io::Result<Router> {
         .nest("/render", unidpp_gateway::router(render))
         .nest("/archive", unidpp_archive::api::router(archive))
         .nest("/relay", unidpp_hub::router(relay));
+
+    // The operator console rides inside the process when the
+    // deployment carries a manifest for it (REARCH R3): mounted at
+    // /console, its links carry the prefix, and its module calls go
+    // through this same origin. No manifest in the environment, no
+    // console — the minimal install serves the modules alone.
+    if std::env::var("UNIDPP_CONSOLE_MANIFEST")
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+    {
+        let mut console_config = unidpp_console::Config::from_env().map_err(other)?;
+        console_config.base_path = "/console".to_string();
+        console_config.self_origin = Some(origin());
+        let console = Arc::new(unidpp_console::AppState::new(console_config).map_err(other)?);
+        router = router.nest("/console", unidpp_console::router(console));
+    }
 
     // The optional federation-peer mount: a second registry instance
     // with its own journal (the reference deployment's JP peer, one

@@ -51,6 +51,10 @@ jobs:
           path: unidpp-hub
       - uses: actions/checkout@v4
         with:
+          repository: unidpp/unidpp-console
+          path: unidpp-console
+      - uses: actions/checkout@v4
+        with:
           repository: unidpp/unidpp-core
           path: unidpp-core
       - uses: actions/checkout@v4

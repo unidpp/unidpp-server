@@ -48,6 +48,11 @@ pub const MODULES: &[(&str, &str, &str)] = &[
         "unidpp-hub",
         include_str!("../../unidpp-hub/openapi.yaml"),
     ),
+    (
+        "console",
+        "unidpp-console",
+        include_str!("../../unidpp-console/openapi.yaml"),
+    ),
 ];
 
 fn base_document() -> Mapping {
@@ -68,7 +73,7 @@ fn base_document() -> Mapping {
         Value::from("description"),
         Value::from(
             "UniDPP serves the whole estate as one deployment: every module (registry, trust, \
-             log, issuer, views, render, archive, relay) keeps its own contract behind its \
+             log, issuer, views, render, archive, relay, console) keeps its own contract behind its \
              prefix, and this document is the union of them. Each module's golden document is \
              served byte-identically at `/<module>/openapi.yaml`; this document exists so a \
              client of the whole deployment reads one surface.",

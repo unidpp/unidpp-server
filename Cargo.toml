@@ -18,6 +18,7 @@ unidpp-projector = { path = "../unidpp-projector" }
 unidpp-gateway = { path = "../unidpp-gateway" }
 unidpp-archive = { path = "../unidpp-archive" }
 unidpp-hub = { path = "../unidpp-hub" }
+unidpp-console = { path = "../unidpp-console" }
 unidpp-model = { path = "../unidpp-core/crates/model" }
 
 [dev-dependencies]

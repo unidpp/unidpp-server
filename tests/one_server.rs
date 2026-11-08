@@ -40,6 +40,14 @@ async fn the_one_server_serves_the_whole_estate() {
         "UNIDPP_SERVER_JP_STATE_FILE",
         dir("jp-registry-journal.jsonl"),
     );
+    // The operator console rides when the manifest exists: the test
+    // writes the minimal one and the mount appears.
+    std::fs::write(
+        root.path().join("unidpp-operator.yaml"),
+        "api_version: unidpp.org/v1\ndeployment:\n  name: server-test\n  profile: whitelabel\n  base_url: https://dpp.example.org\nbranding:\n  organization: Test Operator\n  product_name: Test DPP\nservices:\n  registry:\n    bind: 127.0.0.1:1\n",
+    )
+    .expect("manifest written");
+    std::env::set_var("UNIDPP_CONSOLE_MANIFEST", dir("unidpp-operator.yaml"));
 
     let app = unidpp_server::build_router().expect("router builds");
 
@@ -85,6 +93,25 @@ async fn the_one_server_serves_the_whole_estate() {
             "{name}: the served contract differs from the repo golden"
         );
     }
+
+    // The console mount: the operator surface at /console, its
+    // links carrying the prefix, its contract among the union.
+    let response = get(&app, "/console/healthz").await;
+    assert_eq!(response.status(), StatusCode::OK, "GET /console/healthz");
+    let response = get(&app, "/console").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body reads");
+    let console_html = String::from_utf8_lossy(&body_bytes).into_owned();
+    assert!(
+        console_html.contains(r#"href="/console/config""#),
+        "the console's nav carries its mount prefix"
+    );
+    assert!(
+        console_html.contains(r#"href="/console""#),
+        "the dashboard item points at the mount root, without a trailing slash"
+    );
 
     // The peer mount: a second registry, its own journal, the same
     // golden contract behind its prefix.
