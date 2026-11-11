@@ -33,9 +33,18 @@ pub async fn dispatch(
     let host = host_of(&request);
     for (hostname, router) in table.entries.iter() {
         if *hostname == host {
+            // The outer router's match already left its route-param
+            // state in the extensions; the tenant router re-matches
+            // the path itself, and axum MERGES param state rather
+            // than replacing it — a stale outer set would make every
+            // Path extractor count its captures twice. The tenant
+            // chain rebuilds what it needs; nothing in the family
+            // reads outer-match extensions.
+            let (mut parts, body) = request.into_parts();
+            parts.extensions.clear();
             return router
                 .clone()
-                .oneshot(request)
+                .oneshot(Request::from_parts(parts, body))
                 .await
                 .expect("the tenant router answers");
         }

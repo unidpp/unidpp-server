@@ -89,6 +89,16 @@ async fn the_one_server_serves_the_whole_estate() {
     std::env::set_var("UNIDPP_REGISTRY_URL", "http://127.0.0.1:1");
     std::env::set_var("UNIDPP_GATEWAY_ISSUER_URL", "http://127.0.0.1:1");
     std::env::set_var("UNIDPP_LOG_URL", "http://127.0.0.1:1");
+    // One served tenant (REARCH R6) rides the same process: its own
+    // manifest, dispatched by Host, with a parametrized route the
+    // regression below exercises.
+    std::fs::create_dir_all(root.path().join("tenants/regression")).expect("tenant folder");
+    std::fs::write(
+        root.path().join("tenants/regression/unidpp-operator.yaml"),
+        "api_version: unidpp.org/v1\ndeployment:\n  name: regression\n  profile: whitelabel\n  base_url: https://regression.example.org\n  bind: 127.0.0.1:1\n",
+    )
+    .expect("tenant manifest written");
+    std::env::set_var("UNIDPP_SERVER_TENANTS_DIR", dir("tenants"));
 
     let app = unidpp_server::build_router().expect("router builds");
 
@@ -173,6 +183,49 @@ async fn the_one_server_serves_the_whole_estate() {
         .await
         .expect("body reads");
     assert_eq!(bytes.as_ref(), registry_golden.as_bytes());
+
+    // The tenant mount (REARCH R6): the manifest's Host serves from
+    // its own router, and — the regression — a parametrized route
+    // under a tenant prefix reaches its handler (a store miss is the
+    // handler's own 404, never the path-extractor 500 that a leaked
+    // outer route-param set once produced).
+    let response = get_with(&app, "/issuer/passports/definitely-absent", None).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "the reference answers its own 404"
+    );
+    let tenant_get = |path: &'static str| {
+        let request = Request::builder()
+            .method("GET")
+            .uri(path)
+            .header("host", "regression.example.org")
+            .body(Body::empty())
+            .expect("tenant probe request");
+        app.clone().oneshot(request)
+    };
+    let response = tenant_get("/healthz").await.expect("tenant answered");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "the tenant serves on its manifest Host"
+    );
+    let response = tenant_get("/issuer/passports/definitely-absent")
+        .await
+        .expect("tenant answered");
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "a parametrized route under a tenant reaches its handler (the handler's own 404)"
+    );
+    let response = tenant_get("/registry/items/definitely-absent")
+        .await
+        .expect("tenant answered");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = tenant_get("/render/untp/product/definitely-absent")
+        .await
+        .expect("tenant answered");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
     // The union document equals its committed golden.
     let response = get(&app, "/openapi.yaml").await;
