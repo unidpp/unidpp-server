@@ -24,6 +24,9 @@ unidpp-hub = { path = "../unidpp-hub" }
 unidpp-console = { path = "../unidpp-console" }
 unidpp-config = { path = "../unidpp-config" }
 unidpp-model = { path = "../unidpp-core/crates/model" }
+unidpp-s13 = { path = "../unidpp-core/crates/s13" }
+unidpp-grid = { path = "../unidpp-core/crates/grid" }
+unidpp-signatif = { path = "../unidpp-signatif" }
 
 tower = { version = "0.5", features = ["util"] }
 

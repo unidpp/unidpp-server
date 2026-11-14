@@ -5,6 +5,7 @@
 //! the union contract.
 
 pub mod contract;
+mod federation;
 pub mod identity;
 
 use std::sync::Arc;
@@ -326,6 +327,16 @@ fn served_router(
         let jp = Arc::new(unidpp_registry::api::AppState::new(jp_config)?);
         router = router.nest("/registry-jp", unidpp_registry::api::router(jp));
     }
+
+    // The federation surface (the S13 seam): the self-hosted estate
+    // federates like the edge does — signed requests answer under
+    // the governing policy, the choreography journals and replays.
+    router = router.nest(
+        "/s13",
+        crate::federation::api::router(
+            std::sync::Arc::new(federation::FederationState::from_env()),
+        ),
+    );
 
     router = router.nest("/identity", identity::api::router(identity_state.clone()));
 
