@@ -45,6 +45,8 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: unidpp/unidpp-hub, path: unidpp-hub }
       - uses: actions/checkout@v4
+        with: { repository: unidpp/unidpp-resolver, path: unidpp-resolver }
+      - uses: actions/checkout@v4
         with: { repository: unidpp/unidpp-core, path: unidpp-core }
       - uses: actions/checkout@v4
         with: { repository: unidpp/unidpp-signatif, path: unidpp-signatif }
