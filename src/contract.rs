@@ -58,6 +58,11 @@ pub const MODULES: &[(&str, &str, &str)] = &[
         "unidpp-server",
         include_str!("../openapi/identity.yaml"),
     ),
+    (
+        "resolver",
+        "unidpp-resolver",
+        include_str!("../../unidpp-resolver/openapi.yaml"),
+    ),
 ];
 
 fn base_document() -> Mapping {

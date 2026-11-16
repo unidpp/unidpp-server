@@ -578,3 +578,65 @@ fn export_golden() {
     )
     .expect("identity golden written");
 }
+
+// ---------------------------------------------------------------------------
+// The resolution surface: the passport's resolver_uri promise answers
+// behind /resolver — the same module the edge serves (the discovery
+// document, the identifier resolution, the no-information 404s
+// byte-identically, I12).
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_resolution_surface_answers() {
+    let app = unidpp_server::build_router().expect("the router builds");
+
+    // The discovery document names the identifier keys and carriers.
+    let response = get(&app, "/resolver").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let discovery: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body"),
+    )
+    .expect("the discovery document is JSON");
+    assert!(
+        discovery.get("identifierKeys").is_some(),
+        "the discovery document names its identifier vocabulary"
+    );
+
+    // Well-formed but unregistered identifiers answer the
+    // no-information 404 (I12: the same bytes the dark one answers).
+    let unknown = get(
+        &app,
+        "/resolver/resolve?identifier=gs1:%2801%2908712345000004",
+    )
+    .await;
+    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+    let dark = get(
+        &app,
+        "/resolver/resolve?identifier=gs1:%2801%2908763813339317",
+    )
+    .await;
+    assert_eq!(dark.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        axum::body::to_bytes(unknown.into_body(), usize::MAX)
+            .await
+            .expect("body"),
+        axum::body::to_bytes(dark.into_body(), usize::MAX)
+            .await
+            .expect("body"),
+        "unknown and dark answer byte-identically"
+    );
+
+    // The module's contract carries at its prefix, titled for it.
+    let contract = get(&app, "/resolver/openapi.yaml").await;
+    assert_eq!(contract.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        axum::body::to_bytes(contract.into_body(), usize::MAX)
+            .await
+            .expect("body")
+            .to_vec(),
+    )
+    .expect("yaml");
+    assert!(body.contains("resolver"), "the contract names its module");
+}

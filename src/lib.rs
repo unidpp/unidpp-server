@@ -289,6 +289,12 @@ fn served_router(
 
     let relay = Arc::new(unidpp_hub::AppState::new(unidpp_hub::Config::from_env()).map_err(other)?);
 
+    // The resolution surface (the passport's resolver_uri promise): the
+    // same resolver module the edge serves, mounted behind /resolver.
+    let resolver = Arc::new(unidpp_resolver::api::AppState::new(
+        unidpp_resolver::api::Config::from_env(),
+    )?);
+
     let mut router = Router::new()
         .nest("/registry", registry_router)
         .nest("/trust", unidpp_trust::api::router(trust))
@@ -297,7 +303,8 @@ fn served_router(
         .nest("/views", unidpp_projector::api::router(views))
         .nest("/render", unidpp_gateway::router(render))
         .nest("/archive", unidpp_archive::api::router(archive))
-        .nest("/relay", unidpp_hub::router(relay));
+        .nest("/relay", unidpp_hub::router(relay))
+        .nest("/resolver", unidpp_resolver::api::router(resolver));
 
     // The operator console rides inside the process when the
     // deployment carries a manifest for it (REARCH R3): mounted at

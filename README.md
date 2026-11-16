@@ -22,7 +22,7 @@ document, and the federation surface.
 
 /registry    /trust     /log      /issuer
 /views       /render    /archive  /relay
-/console     /identity  /s13
+/resolver    /console   /identity /s13
 /registry-jp             the optional national peer (see below)
 ```
 

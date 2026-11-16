@@ -21,6 +21,7 @@ unidpp-projector = { path = "../unidpp-projector" }
 unidpp-gateway = { path = "../unidpp-gateway" }
 unidpp-archive = { path = "../unidpp-archive" }
 unidpp-hub = { path = "../unidpp-hub" }
+unidpp-resolver = { path = "../unidpp-resolver" }
 unidpp-console = { path = "../unidpp-console" }
 unidpp-config = { path = "../unidpp-config" }
 unidpp-model = { path = "../unidpp-core/crates/model" }

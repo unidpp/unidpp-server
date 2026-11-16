@@ -2028,6 +2028,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "unidpp-resolver"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "utoipa",
+ "utoipa-swagger-ui",
+]
+
+[[package]]
 name = "unidpp-s13"
 version = "0.1.0"
 dependencies = [
@@ -2070,6 +2082,7 @@ dependencies = [
  "unidpp-model",
  "unidpp-projector",
  "unidpp-registry",
+ "unidpp-resolver",
  "unidpp-s13",
  "unidpp-signatif",
  "unidpp-trust",
