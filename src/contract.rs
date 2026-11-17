@@ -5,63 +5,78 @@
 
 use serde_yaml::{Mapping, Value};
 
-/// (module name = URL prefix, source service, the golden document).
-/// The order is the union document's order — stable by construction.
-pub const MODULES: &[(&str, &str, &str)] = &[
+/// (module name = URL prefix, source service, the golden document,
+/// whether the golden speaks prefixed paths). The order is the union
+/// document's order — stable by construction. The identity module's
+/// golden documents full paths (`/identity/actors`) because its
+/// router registers the bare names under the mount; every other
+/// module's golden documents bare paths the prefix re-keys.
+pub const MODULES: &[(&str, &str, &str, bool)] = &[
     (
         "registry",
         "unidpp-registry",
         include_str!("../../unidpp-registry/openapi.yaml"),
+        false,
     ),
     (
         "trust",
         "unidpp-trust",
         include_str!("../../unidpp-trust/openapi.yaml"),
+        false,
     ),
     (
         "log",
         "unidpp-log",
         include_str!("../../unidpp-log/openapi.yaml"),
+        false,
     ),
     (
         "issuer",
         "unidpp-issuer",
         include_str!("../../unidpp-issuer/openapi.yaml"),
+        false,
     ),
     (
         "views",
         "unidpp-projector",
         include_str!("../../unidpp-projector/openapi.yaml"),
+        false,
     ),
     (
         "render",
         "unidpp-gateway",
         include_str!("../../unidpp-gateway/openapi.yaml"),
+        false,
     ),
     (
         "archive",
         "unidpp-archive",
         include_str!("../../unidpp-archive/openapi.yaml"),
+        false,
     ),
     (
         "relay",
         "unidpp-hub",
         include_str!("../../unidpp-hub/openapi.yaml"),
+        false,
     ),
     (
         "console",
         "unidpp-console",
         include_str!("../../unidpp-console/openapi.yaml"),
+        false,
     ),
     (
         "identity",
         "unidpp-server",
         include_str!("../openapi/identity.yaml"),
+        true,
     ),
     (
         "resolver",
         "unidpp-resolver",
         include_str!("../../unidpp-resolver/openapi.yaml"),
+        false,
     ),
 ];
 
@@ -108,6 +123,21 @@ fn module_contract(module: &str, yaml: &str) -> Value {
     serde_yaml::from_str(yaml).unwrap_or_else(|e| panic!("module {module}: golden parses: {e}"))
 }
 
+/// The union path for a module's golden path: the golden path re-keyed
+/// under the prefix, except the two stated forms. The module root (the
+/// golden's `/`) keys as the bare prefix (`/registry`), the form the
+/// router serves; the trailing-slash form answers nothing. A golden
+/// already carrying the prefix (the identity module) keys verbatim.
+pub fn union_path(module: &str, prefixed_golden: bool, golden_path: &str) -> String {
+    if golden_path == "/" {
+        format!("/{module}")
+    } else if prefixed_golden {
+        golden_path.to_string()
+    } else {
+        format!("/{module}{golden_path}")
+    }
+}
+
 /// The union of every module's contract. Deterministic: module order
 /// is `MODULES` order, path order is golden order, keys deduplicate
 /// on first sight.
@@ -119,13 +149,13 @@ pub fn union_contract() -> Value {
     let mut tags: Vec<Value> = Vec::new();
     let mut tag_names: Vec<String> = Vec::new();
 
-    for (name, _source, yaml) in MODULES {
+    for (name, _source, yaml, prefixed_golden) in MODULES {
         let module_doc = module_contract(name, yaml);
-        let prefix = format!("/{name}");
         if let Some(module_paths) = module_doc.get("paths").and_then(Value::as_mapping) {
             for (path, item) in module_paths {
                 if let Some(p) = path.as_str() {
-                    paths.insert(Value::from(format!("{prefix}{p}")), item.clone());
+                    let union_key = union_path(name, *prefixed_golden, p);
+                    paths.insert(Value::from(union_key), item.clone());
                 }
             }
         }
@@ -185,7 +215,7 @@ pub fn contract_json() -> String {
 /// The deployment discovery document at `/`.
 pub fn discovery_document() -> Value {
     let mut modules: Vec<Value> = Vec::new();
-    for (name, source, _) in MODULES {
+    for (name, source, _, _) in MODULES {
         let mut entry = Mapping::new();
         entry.insert(Value::from("name"), Value::from(*name));
         entry.insert(Value::from("service"), Value::from(*source));

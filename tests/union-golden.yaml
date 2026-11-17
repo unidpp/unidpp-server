@@ -108,7 +108,7 @@ tags:
 - description: Discovery, resolution and carrier normalization
   name: resolution
 paths:
-  /registry/:
+  /registry:
     get:
       operationId: discovery
       responses:
@@ -1113,7 +1113,7 @@ paths:
       summary: Supersede a subregister item's current version.
       tags:
       - register
-  /trust/:
+  /trust:
     get:
       operationId: discovery
       responses:
@@ -1651,7 +1651,7 @@ paths:
       summary: Upsert one entry of a jurisdiction trust list.
       tags:
       - admin
-  /log/:
+  /log:
     get:
       operationId: discovery
       responses:
@@ -1760,7 +1760,7 @@ paths:
         size, byte-identical across restarts).
       tags:
       - log
-  /issuer/:
+  /issuer:
     get:
       operationId: discovery
       responses:
@@ -2092,7 +2092,7 @@ paths:
       summary: Run the full-pipeline verdict for a passport and state its coverage.
       tags:
       - issuance
-  /views/:
+  /views:
     get:
       operationId: discovery
       responses:
@@ -2225,7 +2225,7 @@ paths:
         configured.
       tags:
       - projection
-  /render/:
+  /render:
     get:
       operationId: discovery
       responses:
@@ -2439,7 +2439,7 @@ paths:
         link-resolver entry) — one neutral core, a C4 protocol rendering.
       tags:
       - gateway
-  /archive/:
+  /archive:
     get:
       operationId: discovery
       responses:
@@ -2584,7 +2584,7 @@ paths:
       summary: Re-serve a stored snapshot byte-identically (OAIS access).
       tags:
       - archive
-  /relay/:
+  /relay:
     get:
       operationId: discovery
       responses:
@@ -2694,7 +2694,7 @@ paths:
       summary: Verify a relayed evidence under this hub's key.
       tags:
       - hub
-  /console/:
+  /console:
     get:
       operationId: dashboard
       responses:
@@ -3191,7 +3191,7 @@ paths:
       summary: 'The trust view: operators, trust markers and validity windows.'
       tags:
       - console
-  /identity/identity/actors:
+  /identity/actors:
     get:
       operationId: actors
       responses:
@@ -3243,7 +3243,7 @@ paths:
         credential; afterwards it is `identity:admin`.
       tags:
       - identity
-  /identity/identity/actors/{id}/credentials:
+  /identity/actors/{id}/credentials:
     post:
       operationId: issue
       parameters:
@@ -3286,7 +3286,7 @@ paths:
       summary: Issue an additional credential for an actor (`identity:admin`).
       tags:
       - identity
-  /identity/identity/credentials:
+  /identity/credentials:
     get:
       operationId: credentials
       responses:
@@ -3313,7 +3313,7 @@ paths:
         never stated; the store does not have them.
       tags:
       - identity
-  /identity/identity/credentials/{id}/revoke:
+  /identity/credentials/{id}/revoke:
     post:
       operationId: revoke
       parameters:
@@ -3358,7 +3358,7 @@ paths:
         anything else is `identity:admin`.
       tags:
       - identity
-  /identity/identity/credentials/{id}/rotate:
+  /identity/credentials/{id}/rotate:
     post:
       operationId: rotate
       parameters:
@@ -3404,7 +3404,7 @@ paths:
         rotate itself; anything else is `identity:admin`.
       tags:
       - identity
-  /identity/identity/keyring:
+  /identity/keyring:
     get:
       operationId: keyring
       responses:
@@ -3417,7 +3417,7 @@ paths:
       summary: 'The identity mode: whether enforcement is live and why.'
       tags:
       - identity
-  /identity/identity/scopes:
+  /identity/scopes:
     get:
       operationId: scopes
       responses:
@@ -3430,7 +3430,7 @@ paths:
       summary: 'The scope table: the documented and enforced truth.'
       tags:
       - identity
-  /identity/identity/whoami:
+  /identity/whoami:
     get:
       operationId: whoami
       responses:
@@ -3449,7 +3449,7 @@ paths:
       summary: The presenting credential, its actor and its scopes.
       tags:
       - identity
-  /resolver/:
+  /resolver:
     get:
       operationId: discovery
       responses:

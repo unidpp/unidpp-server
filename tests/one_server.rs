@@ -116,7 +116,7 @@ async fn the_one_server_serves_the_whole_estate() {
     assert_eq!(discovery["service"], "unidpp");
     let modules = discovery["modules"].as_array().expect("modules array");
     assert_eq!(modules.len(), MODULES.len());
-    for (index, (name, source, _)) in MODULES.iter().enumerate() {
+    for (index, (name, source, _, _)) in MODULES.iter().enumerate() {
         assert_eq!(modules[index]["name"], *name);
         assert_eq!(modules[index]["service"], *source);
         assert_eq!(modules[index]["contract"], format!("/{name}/openapi.yaml"));
@@ -126,7 +126,7 @@ async fn the_one_server_serves_the_whole_estate() {
 
     // Every module answers behind its prefix, and its contract is
     // byte-identical with the repo golden (the drift gate, unchanged).
-    for (name, _source, golden) in MODULES {
+    for (name, _source, golden, _) in MODULES {
         let response = get(&app, &format!("/{name}/healthz")).await;
         assert_eq!(response.status(), StatusCode::OK, "GET /{name}/healthz");
         let response = get(&app, &format!("/{name}/openapi.yaml")).await;
@@ -168,8 +168,8 @@ async fn the_one_server_serves_the_whole_estate() {
     // golden contract behind its prefix.
     let registry_golden = MODULES
         .iter()
-        .find(|(name, _, _)| *name == "registry")
-        .map(|(_, _, yaml)| *yaml)
+        .find(|(name, _, _, _)| *name == "registry")
+        .map(|(_, _, yaml, _)| *yaml)
         .expect("registry in MODULES");
     let response = get(&app, "/registry-jp/healthz").await;
     assert_eq!(
@@ -521,7 +521,7 @@ fn the_discovery_document_names_the_modules() {
         .and_then(|m| m.as_sequence().cloned())
         .unwrap_or_default();
     assert_eq!(modules.len(), MODULES.len());
-    for (index, (name, source, _)) in MODULES.iter().enumerate() {
+    for (index, (name, source, _, _)) in MODULES.iter().enumerate() {
         let entry = &modules[index];
         assert_eq!(entry.get("name").and_then(|v| v.as_str()), Some(*name));
         assert_eq!(entry.get("service").and_then(|v| v.as_str()), Some(*source));
@@ -539,8 +539,10 @@ fn the_union_contract_is_well_formed() {
         .get("paths")
         .and_then(|p| p.as_mapping())
         .expect("paths mapping");
-    // Every module's paths appear exactly once, under the prefix.
-    for (name, _, golden) in MODULES {
+    // Every module's paths appear exactly once, under the union-path
+    // rule (the prefix re-key, the bare module root, the prefixed
+    // golden spoken verbatim).
+    for (name, _, golden, prefixed_golden) in MODULES {
         let module_doc: serde_yaml::Value = serde_yaml::from_str(golden).expect("golden parses");
         let module_paths = module_doc
             .get("paths")
@@ -548,7 +550,7 @@ fn the_union_contract_is_well_formed() {
             .expect("paths");
         for (key, value) in module_paths {
             let path = key.as_str().expect("path key");
-            let prefixed = format!("/{name}{path}");
+            let prefixed = contract::union_path(name, *prefixed_golden, path);
             let union_entry = paths
                 .get(serde_yaml::Value::from(prefixed.as_str()))
                 .unwrap_or_else(|| panic!("{prefixed}: missing from the union"));
