@@ -16,7 +16,7 @@ document, and the federation surface.
 ```text
 /                       the deployment discovery document
 /healthz                liveness
-/openapi.yaml           the union contract (one surface, eight groups)
+/openapi.yaml           the union contract (the union of every module's contract)
 /openapi.json           the union contract as JSON
 /version                the deployment version
 
