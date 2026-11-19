@@ -28,7 +28,11 @@ document, and the federation surface.
 
 Each module keeps everything it had: its golden `openapi.yaml` is
 served byte-identically at `/<module>/openapi.yaml`, its own
-`/healthz`, `/docs` and env keys under the prefix. A client of one
+`/healthz` and env keys under the prefix. The swagger UIs the module
+crates mount at `/docs` serve in the single-module deployments; in
+this deployment the nested mount's redirect lands on the root `/docs`,
+which serves nothing — read the contracts directly, at
+`/<module>/openapi.yaml` or in the union document. A client of one
 module changes only its base URL; a client of the deployment reads
 one surface.
 
